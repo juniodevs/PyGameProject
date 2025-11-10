@@ -267,6 +267,10 @@ class Gameplay:
 
                 # Also briefly flash the player to emphasize the hit-deal action
                 self.player.flash_timer = now
+                try:
+                    self.app.trigger_zoom(duration_ms=220, magnitude=1.06)
+                except Exception:
+                    pass
 
                 if killed:
                     # Enemy died
@@ -309,6 +313,10 @@ class Gameplay:
                     pass
                 try:
                     self.camera.start_shake(duration_ms=260, magnitude=10)
+                except Exception:
+                    pass
+                try:
+                    self.app.trigger_zoom(duration_ms=220, magnitude=1.08)
                 except Exception:
                     pass
 
