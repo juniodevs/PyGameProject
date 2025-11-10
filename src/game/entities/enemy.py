@@ -24,9 +24,8 @@ class Enemy:
         self.height = 160
         self.rect = pygame.Rect(x, y, self.width, self.height)
         
-        # Actual character hitbox (proportional to sprite)
         # Much larger to match sprite size better
-        self.hitbox_width = 137
+        self.hitbox_width = 74
         self.hitbox_height = 74
         
         # Movement
@@ -194,11 +193,15 @@ class Enemy:
         else:
             self.on_ground = False
 
-        # Keep inside horizontal bounds
-        if self.rect.left < 0:
-            self.rect.left = 0
-        if self.rect.right > world_width:
-            self.rect.right = world_width
+        # Keep inside horizontal bounds based on hitbox (not sprite image)
+        # Shift the sprite rect so the hitbox remains inside the world bounds.
+        hb = self.get_hitbox()
+        if hb.left < 0:
+            overlap = 0 - hb.left
+            self.rect.x += overlap
+        if hb.right > world_width:
+            overlap = hb.right - world_width
+            self.rect.x -= overlap
 
         # Update cooldowns
         now = pygame.time.get_ticks()

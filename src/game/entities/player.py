@@ -11,14 +11,12 @@ class Player:
     """
 
     def __init__(self, x, y):
-        # target logical size for the sprite frames (increased size)
-        # Updated to 304x160 as per requirements
         self.width = 304
         self.height = 160
         self.rect = pygame.Rect(x, y, self.width, self.height)
         
         # Hitbox (same as enemy for consistency)
-        self.hitbox_width = 137
+        self.hitbox_width = 74
         self.hitbox_height = 74
 
         # Movement
@@ -193,6 +191,17 @@ class Player:
         self.rect.x += int(self.vel_x + self.knockback_vel_x)
         self.rect.y += int(self.vel_y)
 
+        # Ensure horizontal/world bounds based on hitbox (not sprite image)
+        # If the hitbox is going out of bounds, shift the full sprite rect so the hitbox stays inside.
+        hb = self.get_hitbox()
+        if hb.left < 0:
+            # shift right by the overlap amount
+            overlap = 0 - hb.left
+            self.rect.x += overlap
+        if hb.right > screen_width:
+            overlap = hb.right - screen_width
+            self.rect.x -= overlap
+
         # Floor collision
         if self.rect.bottom >= ground_y:
             self.rect.bottom = ground_y
@@ -201,12 +210,6 @@ class Player:
             self.on_ground = True
         else:
             self.on_ground = False
-
-        # Keep inside horizontal bounds
-        if self.rect.left < 0:
-            self.rect.left = 0
-        if self.rect.right > screen_width:
-            self.rect.right = screen_width
 
         # Decide animation state based on velocities and flags
         # Death/hit take precedence (not implemented death trigger here)

@@ -40,6 +40,8 @@ class Gameplay:
         self.background = ParallaxBackground(self.screen_width, self.screen_height, self.world_width, self.ground_y)
         
         self.font = pygame.font.Font(None, 28)
+        # Debug toggles
+        self.debug_attacks = False  # set True to print attack/hitbox rects when damage occurs
         
         # Death state tracking
         self.is_dead = False
@@ -209,34 +211,46 @@ class Gameplay:
         # Only check on attack states
         if not self.player.state.startswith('attack'):
             return
-            
-        # Get attack hitbox (extends in front of player)
+        # Build attack rect relative to the player's hitbox (not sprite rect)
+        # This ensures vertical alignment and collisions are based on hitboxes only.
         attack_range = 180  # How far the attack reaches
-        attack_height = self.player.height // 2  # Narrower vertical range
-        attack_y_offset = self.player.height // 4
-        
+        player_hb = self.player.get_hitbox()
+        attack_height = player_hb.height  # match hitbox height for consistent vertical coverage
+        attack_y = player_hb.top
+
         if self.player.facing > 0:
             attack_rect = pygame.Rect(
-                self.player.rect.right,
-                self.player.rect.top + attack_y_offset,
+                player_hb.right,
+                attack_y,
                 attack_range,
                 attack_height
             )
         else:
             attack_rect = pygame.Rect(
-                self.player.rect.left - attack_range,
-                self.player.rect.top + attack_y_offset,
+                player_hb.left - attack_range,
+                attack_y,
                 attack_range,
                 attack_height
             )
         
         # Check collision with enemies using their hitbox
+        # Narrow the vertical coverage of the attack to the central portion of the hitbox
+        # This reduces hitting transparent sprite areas above/below the body.
+        attack_height = max(8, int(player_hb.height * 0.6))
+        attack_y = player_hb.top + (player_hb.height - attack_height) // 2
+        if self.player.facing > 0:
+            attack_rect = pygame.Rect(player_hb.right, attack_y, attack_range, attack_height)
+        else:
+            attack_rect = pygame.Rect(player_hb.left - attack_range, attack_y, attack_range, attack_height)
+
         for enemy in self.enemies:
             enemy_hitbox = enemy.get_hitbox()
             if attack_rect.colliderect(enemy_hitbox):
                 # Damage enemy and knock it back (away from player)
                 damage_amount = 2
                 knockback_dir = 1 if self.player.facing > 0 else -1
+                if self.debug_attacks:
+                    print(f"ATTACK hit: attack_rect={attack_rect}, enemy_rect={enemy.rect}, enemy_hitbox={enemy_hitbox}")
                 killed = enemy.take_damage(damage_amount, knockback_dir)
                 
                 # Knockback player back from enemy
@@ -253,27 +267,18 @@ class Gameplay:
             # Only check if enemy is in attack state
             if enemy.state != 'attack1' and enemy.state != 'attack2':
                 continue
-            
-            # Get attack hitbox from enemy (extends in front of enemy)
+            # Get attack hitbox from enemy's hitbox (extends in front of enemy)
             attack_range = 180
-            attack_height = enemy.height // 2
-            attack_y_offset = enemy.height // 4
-            
+            enemy_hb = enemy.get_hitbox()
+            # Narrow enemy attack vertical coverage to central portion of its hitbox
+            attack_height = max(8, int(enemy_hb.height * 0.6))
+            attack_y = enemy_hb.top + (enemy_hb.height - attack_height) // 2
+
             if enemy.facing > 0:
-                attack_rect = pygame.Rect(
-                    enemy.rect.right,
-                    enemy.rect.top + attack_y_offset,
-                    attack_range,
-                    attack_height
-                )
+                attack_rect = pygame.Rect(enemy_hb.right, attack_y, attack_range, attack_height)
             else:
-                attack_rect = pygame.Rect(
-                    enemy.rect.left - attack_range,
-                    enemy.rect.top + attack_y_offset,
-                    attack_range,
-                    attack_height
-                )
-            
+                attack_rect = pygame.Rect(enemy_hb.left - attack_range, attack_y, attack_range, attack_height)
+
             # Check collision with player hitbox (use same hitbox system)
             player_hitbox = self.player.get_hitbox()
             
