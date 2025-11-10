@@ -18,8 +18,8 @@ class Player:
         self.rect = pygame.Rect(x, y, self.width, self.height)
         
         # Hitbox (same as enemy for consistency)
-        self.hitbox_width = 80
-        self.hitbox_height = 50
+        self.hitbox_width = 137
+        self.hitbox_height = 74
 
         # Movement
         self.speed = 5

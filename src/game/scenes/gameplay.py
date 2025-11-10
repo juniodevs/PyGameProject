@@ -53,8 +53,6 @@ class Gameplay:
             # Attack with Ctrl -> call player's attack animation
             if event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
                 self.player.attack()
-                # Check collision with enemies for damage
-                self._check_player_attack_collision()
             # Test damage with 'H' key (for testing HP system)
             if event.key == pygame.K_h:
                 self.player.take_damage(1)
@@ -68,6 +66,9 @@ class Gameplay:
         # Update enemies
         for enemy in self.enemies:
             enemy.update(self.player, self.world_width, self.world_height, self.ground_y)
+        
+        # Check player attack collisions with enemies
+        self._check_player_attack_collision()
         
         # Check enemy attack collisions with player
         self._check_enemy_attack_collision()
@@ -130,6 +131,9 @@ class Gameplay:
         if player_screen_rect.right > 0 and player_screen_rect.left < self.screen_width:
             self.player.draw_at(screen, player_screen_rect.topleft)
 
+        # Debug: Draw collision hitboxes
+        self._draw_debug_hitboxes(screen)
+
         # HUD / instructions (fixed to screen, not affected by camera)
         instr = self.font.render('Esc - Voltar ao Menu', True, BLACK)
         screen.blit(instr, (10, 10))
@@ -144,6 +148,10 @@ class Gameplay:
         # If player is dead, show death countdown
         if self.is_dead:
             self._draw_death_countdown(screen)
+        
+        # Debug: show camera position
+        cam_debug = self.font.render(f'Cam: ({int(self.camera.x)}, {int(self.camera.y)})', True, BLACK)
+        screen.blit(cam_debug, (10, 40))
 
     def _draw_hp_overlay(self, screen):
         """Draw HP overlay showing current HP / max HP as visual hearts/bars."""
@@ -322,6 +330,33 @@ class Gameplay:
         hp_text = hp_font.render(f'{enemy.current_hp}/{enemy.max_hp}', True, (255, 255, 255))
         text_rect = hp_text.get_rect(center=(enemy_screen_rect.centerx, bar_y - 12))
         screen.blit(hp_text, text_rect)
+
+    def _draw_debug_hitboxes(self, screen):
+        """Draw debug hitboxes for collision detection testing."""
+        # Draw player sprite rect (yellow outline)
+        player_screen_rect = self.camera.apply(self.player.rect)
+        pygame.draw.rect(screen, (255, 255, 0), player_screen_rect, 2)
+        
+        # Draw player hitbox (red outline)
+        player_hitbox = self.player.get_hitbox()
+        player_hitbox_screen = self.camera.apply(player_hitbox)
+        pygame.draw.rect(screen, (255, 0, 0), player_hitbox_screen, 2)
+        
+        # Draw enemy rects and hitboxes
+        for enemy in self.enemies:
+            # Draw enemy sprite rect (cyan outline)
+            enemy_screen_rect = self.camera.apply(enemy.rect)
+            pygame.draw.rect(screen, (0, 255, 255), enemy_screen_rect, 2)
+            
+            # Draw enemy hitbox (magenta outline)
+            enemy_hitbox = enemy.get_hitbox()
+            enemy_hitbox_screen = self.camera.apply(enemy_hitbox)
+            pygame.draw.rect(screen, (255, 0, 255), enemy_hitbox_screen, 2)
+        
+        # Draw debug info
+        debug_font = pygame.font.Font(None, 20)
+        debug_text = debug_font.render('Amarelo=Player Sprite | Vermelho=Player Hitbox | Ciano=Enemy Sprite | Magenta=Enemy Hitbox', True, (255, 255, 0))
+        screen.blit(debug_text, (10, self.screen_height - 30))
 
     def _spawn_new_enemy(self):
         """Spawn a new enemy at a random location on the map."""

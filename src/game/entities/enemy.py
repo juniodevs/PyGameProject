@@ -26,8 +26,8 @@ class Enemy:
         
         # Actual character hitbox (proportional to sprite)
         # Much larger to match sprite size better
-        self.hitbox_width = 80
-        self.hitbox_height = 50
+        self.hitbox_width = 137
+        self.hitbox_height = 74
         
         # Movement
         self.speed = 3.0
