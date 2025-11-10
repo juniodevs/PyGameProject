@@ -12,13 +12,17 @@ class Player:
         self.jump_power = -12
         self.gravity = 0.6
         self.on_ground = False
+        # direction player is facing: 1 = right, -1 = left
+        self.facing = 1
 
     def handle_input(self, keys):
         self.vel_x = 0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             self.vel_x = -self.speed
+            self.facing = -1
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             self.vel_x = self.speed
+            self.facing = 1
         if (keys[pygame.K_SPACE] or keys[pygame.K_w] or keys[pygame.K_UP]) and self.on_ground:
             self.vel_y = self.jump_power
             self.on_ground = False
