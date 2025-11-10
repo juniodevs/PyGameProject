@@ -4,6 +4,7 @@ from ..settings import WHITE, BLACK
 from ..entities.player import Player
 from ..entities.enemy import Enemy
 from ..camera import Camera
+from ..background import ParallaxBackground
 
 
 class Gameplay:
@@ -35,6 +36,8 @@ class Gameplay:
         
         # Initialize camera to follow the player
         self.camera = Camera(self.screen_width, self.screen_height, self.world_width, self.world_height)
+        # Parallax background manager (loads layers and handles parallax drawing)
+        self.background = ParallaxBackground(self.screen_width, self.screen_height, self.world_width, self.ground_y)
         
         self.font = pygame.font.Font(None, 28)
         
@@ -102,19 +105,8 @@ class Gameplay:
         self.camera.update(self.player.rect)
 
     def render(self, screen):
-        # Background (fill screen with sky color)
-        screen.fill((120, 180, 255))
-
-        # Calculate ground position in screen space
-        ground_screen_y = self.ground_y - self.camera.y
-        
-        # Draw ground (extends across the screen)
-        if ground_screen_y < self.screen_height:
-            pygame.draw.rect(
-                screen,
-                (80, 200, 80),
-                (0, ground_screen_y, self.screen_width, self.screen_height - ground_screen_y)
-            )
+        # Draw parallax background (handles sky, layers, fog and ground image)
+        self.background.draw(screen, self.camera)
 
         # Draw enemies (convert to screen coordinates)
         for enemy in self.enemies:
