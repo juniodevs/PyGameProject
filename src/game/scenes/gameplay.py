@@ -1,6 +1,6 @@
 import pygame
 import random
-from ..settings import WHITE, BLACK
+from ..settings import WHITE
 from ..entities.player import Player
 from ..entities.enemy import Enemy
 from ..camera import Camera
@@ -13,40 +13,66 @@ class Gameplay:
         self.screen = app.screen
         self.screen_width = self.screen.get_width()
         self.screen_height = self.screen.get_height()
-        
+
         # Expanded world/map dimensions (much larger than screen)
         # This allows the player to move around in a larger world
         self.world_width = 2400  # 3x screen width for horizontal exploration
         self.world_height = 2400  # Match width for square-ish world proportions
-        
+
         # Ground Y coordinate (in world space)
         self.ground_y = self.world_height - 150
-        
+
         # Create player in the world (starting position)
         # Player height is 160, so position it appropriately on the ground
         self.player = Player(400, self.ground_y - 160)
-        
+
         # Create test enemy
         self.enemies = []
         test_enemy = Enemy(1000, self.ground_y - 160)
         self.enemies.append(test_enemy)
-        
+
         # Kill counter
         self.kill_count = 0
-        
+
         # Initialize camera to follow the player
         self.camera = Camera(self.screen_width, self.screen_height, self.world_width, self.world_height)
         # Parallax background manager (loads layers and handles parallax drawing)
         self.background = ParallaxBackground(self.screen_width, self.screen_height, self.world_width, self.ground_y)
-        
-        self.font = pygame.font.Font(None, 28)
+
+        # Choose a game-like font for HUD and messages
+        self.font = self._choose_game_font(28)
+
         # Debug toggles
         self.debug_attacks = False  # set True to print attack/hitbox rects when damage occurs
-        
+
         # Death state tracking
         self.is_dead = False
         self.death_time = 0  # Timestamp when player died
         self.death_countdown = 5  # Seconds before returning to menu
+
+    def _choose_game_font(self, size, bold=False):
+        """Pick a game-like font if available, otherwise fall back to system default.
+
+        Tries a small list of common game/arcade fonts and falls back to SysFont.
+        """
+        preferred = [
+            'PressStart2P',
+            'ArcadeClassic',
+            'Impact',
+            'Arial Black',
+            'Verdana',
+            'Courier New',
+            'Arial',
+        ]
+        for name in preferred:
+            try:
+                path = pygame.font.match_font(name)
+                if path:
+                    return pygame.font.Font(path, size)
+            except Exception:
+                continue
+        # fallback
+        return pygame.font.SysFont(None, size, bold=bold)
 
     def handle_event(self, event):
         if event.type == pygame.QUIT:
@@ -67,17 +93,17 @@ class Gameplay:
         self.player.handle_input(keys)
         # Player update uses world dimensions instead of screen dimensions
         self.player.update(self.world_width, self.world_height, self.ground_y)
-        
+
         # Update enemies
         for enemy in self.enemies:
             enemy.update(self.player, self.world_width, self.world_height, self.ground_y)
-        
+
         # Check player attack collisions with enemies
         self._check_player_attack_collision()
-        
+
         # Check enemy attack collisions with player
         self._check_enemy_attack_collision()
-        
+
         # Remove dead enemies after death animation completes (1 second = 10 frames * 100ms)
         now = pygame.time.get_ticks()
         # Track which enemies are about to be removed (for kill counter)
@@ -85,24 +111,24 @@ class Gameplay:
             if enemy.current_hp <= 0 and now - enemy.death_time > 1000:
                 self.kill_count += 1
                 self._spawn_new_enemy()  # Spawn a new enemy when one dies
-        
+
         self.enemies = [e for e in self.enemies if not (e.current_hp <= 0 and now - e.death_time > 1000)]
-        
+
         # Check if player just died
         if self.player.current_hp <= 0 and not self.is_dead:
             self.is_dead = True
             self.death_time = pygame.time.get_ticks()
-        
+
         # If player is dead, manage countdown and return to menu
         if self.is_dead:
             now = pygame.time.get_ticks()
             elapsed_ms = now - self.death_time
             elapsed_s = elapsed_ms / 1000.0
-            
+
             if elapsed_s >= self.death_countdown:
                 # Countdown finished, return to menu
                 self.app.go_to_menu()
-        
+
         # Update camera to follow the player
         self.camera.update(self.player.rect)
 
@@ -126,45 +152,43 @@ class Gameplay:
             self.player.draw_at(screen, player_screen_rect.topleft)
 
         # HUD / instructions (fixed to screen, not affected by camera)
-        instr = self.font.render('Esc - Voltar ao Menu', True, BLACK)
+        instr = self.font.render('Esc - Voltar ao Menu', True, WHITE)
         screen.blit(instr, (10, 10))
-        
+
         # Draw kill counter
-        kills_text = self.font.render(f'Kills: {self.kill_count}', True, BLACK)
+        kills_text = self.font.render(f'Kills: {self.kill_count}', True, WHITE)
         screen.blit(kills_text, (10, 50))
-        
+
         # Draw HP overlay (5 hearts/hearts)
         self._draw_hp_overlay(screen)
-        
+
         # If player is dead, show death countdown
         if self.is_dead:
             self._draw_death_countdown(screen)
-        
-        # Debug: show camera position
-        cam_debug = self.font.render(f'Cam: ({int(self.camera.x)}, {int(self.camera.y)})', True, BLACK)
-        screen.blit(cam_debug, (10, 40))
+
+        # Camera debug removed on user request
 
     def _draw_hp_overlay(self, screen):
         """Draw HP overlay showing current HP / max HP as visual hearts/bars."""
         # HP display at top right
         hp_x = self.screen_width - 200
         hp_y = 20
-        
-        # Draw label
-        hp_label = self.font.render(f'HP: {self.player.current_hp} / {self.player.max_hp}', True, (0, 0, 0))
+
+        # Draw label (white now)
+        hp_label = self.font.render(f'HP: {self.player.current_hp} / {self.player.max_hp}', True, WHITE)
         screen.blit(hp_label, (hp_x, hp_y))
-        
+
         # Draw HP bars visually (5 bars)
         bar_width = 25
         bar_height = 20
         bar_gap = 5
         bar_x = hp_x
         bar_y = hp_y + 35
-        
+
         for i in range(self.player.max_hp):
             # Draw background (gray)
             pygame.draw.rect(screen, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
-            
+
             # Draw current HP (green for alive, red if low)
             if i < self.player.current_hp:
                 # Full bar - green
@@ -172,10 +196,10 @@ class Gameplay:
             else:
                 # Empty bar - dark gray
                 color = (50, 50, 50)
-            
+
             pygame.draw.rect(screen, color, (bar_x, bar_y, bar_width, bar_height))
             pygame.draw.rect(screen, (0, 0, 0), (bar_x, bar_y, bar_width, bar_height), 2)  # Border
-            
+
             bar_x += bar_width + bar_gap
 
     def _draw_death_countdown(self, screen):
@@ -185,21 +209,21 @@ class Gameplay:
         overlay.set_alpha(128)
         overlay.fill((0, 0, 0))
         screen.blit(overlay, (0, 0))
-        
+
         # Calculate remaining time
         now = pygame.time.get_ticks()
         elapsed_ms = now - self.death_time
         remaining_s = max(0, self.death_countdown - (elapsed_ms / 1000.0))
-        
+
         # Death message
-        large_font = pygame.font.Font(None, 72)
+        large_font = self._choose_game_font(72)
         death_text = large_font.render('VOCÊ MORREU', True, (255, 0, 0))
         text_rect = death_text.get_rect(center=(self.screen_width // 2, self.screen_height // 2 - 80))
         screen.blit(death_text, text_rect)
-        
+
         # Countdown
-        countdown_font = pygame.font.Font(None, 48)
-        countdown_text = countdown_font.render(f'Retornando em: {int(remaining_s) + 1}s', True, (255, 255, 255))
+        countdown_font = self._choose_game_font(48)
+        countdown_text = countdown_font.render(f'Retornando em: {int(remaining_s) + 1}s', True, WHITE)
         countdown_rect = countdown_text.get_rect(center=(self.screen_width // 2, self.screen_height // 2 + 50))
         screen.blit(countdown_text, countdown_rect)
 
@@ -229,7 +253,7 @@ class Gameplay:
                 attack_range,
                 attack_height
             )
-        
+
         # Check collision with enemies using their hitbox
         # Narrow the vertical coverage of the attack to the central portion of the hitbox
         # This reduces hitting transparent sprite areas above/below the body.
@@ -249,7 +273,7 @@ class Gameplay:
                 if self.debug_attacks:
                     print(f"ATTACK hit: attack_rect={attack_rect}, enemy_rect={enemy.rect}, enemy_hitbox={enemy_hitbox}")
                 killed = enemy.take_damage(damage_amount, knockback_dir)
-                
+
                 # Knockback player back from enemy
                 knockback_strength = 10
                 self.player.knockback_vel_x = knockback_strength * (-self.player.facing)
@@ -296,12 +320,12 @@ class Gameplay:
 
             # Check collision with player hitbox (use same hitbox system)
             player_hitbox = self.player.get_hitbox()
-            
+
             if attack_rect.colliderect(player_hitbox):
                 # Damage player and knock back (away from enemy)
                 damage_amount = 1
                 self.player.take_damage(damage_amount)
-                
+
                 # Knockback player away from enemy
                 knockback_strength = 15
                 self.player.knockback_vel_x = knockback_strength * (-enemy.facing)
@@ -326,14 +350,14 @@ class Gameplay:
         bar_width = 60
         bar_height = 8
         bar_margin = 5  # Space between sprite and bar
-        
+
         # Position bar above the enemy
         bar_x = enemy_screen_rect.centerx - bar_width // 2
         bar_y = enemy_screen_rect.top - bar_height - bar_margin
-        
+
         # Draw background (dark gray)
         pygame.draw.rect(screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
-        
+
         # Draw HP fill (green or red based on health)
         if enemy.current_hp > enemy.max_hp // 2:
             hp_color = (0, 200, 0)  # Green
@@ -341,18 +365,18 @@ class Gameplay:
             hp_color = (200, 200, 0)  # Yellow
         else:
             hp_color = (200, 0, 0)  # Red
-        
+
         # Calculate filled width based on current HP
         hp_ratio = enemy.current_hp / enemy.max_hp
         filled_width = int(bar_width * hp_ratio)
         if filled_width > 0:
             pygame.draw.rect(screen, hp_color, (bar_x, bar_y, filled_width, bar_height))
-        
+
         # Draw border
         pygame.draw.rect(screen, (255, 255, 255), (bar_x, bar_y, bar_width, bar_height), 1)
-        
+
         # Draw HP text
-        hp_font = pygame.font.Font(None, 16)
+        hp_font = self._choose_game_font(16)
         hp_text = hp_font.render(f'{enemy.current_hp}/{enemy.max_hp}', True, (255, 255, 255))
         text_rect = hp_text.get_rect(center=(enemy_screen_rect.centerx, bar_y - 12))
         screen.blit(hp_text, text_rect)
@@ -362,25 +386,25 @@ class Gameplay:
         # Draw player sprite rect (yellow outline)
         player_screen_rect = self.camera.apply(self.player.rect)
         pygame.draw.rect(screen, (255, 255, 0), player_screen_rect, 2)
-        
+
         # Draw player hitbox (red outline)
         player_hitbox = self.player.get_hitbox()
         player_hitbox_screen = self.camera.apply(player_hitbox)
         pygame.draw.rect(screen, (255, 0, 0), player_hitbox_screen, 2)
-        
+
         # Draw enemy rects and hitboxes
         for enemy in self.enemies:
             # Draw enemy sprite rect (cyan outline)
             enemy_screen_rect = self.camera.apply(enemy.rect)
             pygame.draw.rect(screen, (0, 255, 255), enemy_screen_rect, 2)
-            
+
             # Draw enemy hitbox (magenta outline)
             enemy_hitbox = enemy.get_hitbox()
             enemy_hitbox_screen = self.camera.apply(enemy_hitbox)
             pygame.draw.rect(screen, (255, 0, 255), enemy_hitbox_screen, 2)
-        
+
         # Draw debug info
-        debug_font = pygame.font.Font(None, 20)
+        debug_font = self._choose_game_font(20)
         debug_text = debug_font.render('Amarelo=Player Sprite | Vermelho=Player Hitbox | Ciano=Enemy Sprite | Magenta=Enemy Hitbox', True, (255, 255, 0))
         screen.blit(debug_text, (10, self.screen_height - 30))
 
@@ -393,7 +417,7 @@ class Gameplay:
             # Make sure enemy spawns far enough from player
             if abs(spawn_x - self.player.rect.centerx) > min_spawn_dist:
                 break
-        
+
         spawn_y = self.ground_y - 160
         new_enemy = Enemy(spawn_x, spawn_y)
         self.enemies.append(new_enemy)
