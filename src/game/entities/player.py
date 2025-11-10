@@ -51,6 +51,12 @@ class Player:
         # Lock movement while certain animations play
         self.locked = False
 
+        # HP system (5 hits max)
+        self.max_hp = 5
+        self.current_hp = 5
+        self.hit_cooldown = 0  # Cooldown between hits in milliseconds
+        self.hit_cooldown_duration = 1000  # 1 second invulnerability after hit
+
         # load sprites
         self._load_sprites()
 
@@ -103,8 +109,9 @@ class Player:
             self.animations[state] = frames_list
 
     def handle_input(self, keys):
-        # If locked (e.g., during attack animations) allow minimal movement if desired
-        if self.locked:
+        # If locked (e.g., during attack animations) or dead, don't accept movement input
+        if self.locked or self.state == 'death':
+            self.vel_x = 0
             return
 
         self.vel_x = 0
@@ -128,6 +135,35 @@ class Player:
         self.last_anim_time = pygame.time.get_ticks()
         # lock movement briefly while attacking
         self.locked = True
+
+    def take_damage(self, amount=1):
+        """Player receives damage. Activates hit animation and cooldown.
+        
+        Args:
+            amount: Amount of damage to take (default 1)
+            
+        Returns:
+            True if player dies (HP <= 0), False otherwise
+        """
+        # Check if still in cooldown (invulnerable)
+        now = pygame.time.get_ticks()
+        if self.hit_cooldown > 0 and now - self.hit_cooldown < self.hit_cooldown_duration:
+            return False
+        
+        self.current_hp -= amount
+        self.hit_cooldown = now
+        
+        # Play hit animation
+        if self.current_hp > 0:
+            self._set_state('hit')
+            self.locked = True
+        else:
+            # Player dies
+            self._set_state('death')
+            self.current_hp = 0
+            return True
+        
+        return False
 
     def _set_state(self, new_state):
         if new_state == self.state:
@@ -164,6 +200,18 @@ class Player:
         if self.state == 'death':
             # play death until finished (no transitions)
             self._update_animation(loop=False)
+            return
+
+        # If in hit state, advance animation and unlock when finished
+        if self.state == 'hit':
+            finished = self._update_animation(loop=False)
+            if finished:
+                # return to run or idle depending on vel_x
+                self.locked = False
+                if abs(self.vel_x) > 0:
+                    self._set_state('run')
+                else:
+                    self._set_state('idle')
             return
 
         # If attacking, advance attack animation and unlock when finished
