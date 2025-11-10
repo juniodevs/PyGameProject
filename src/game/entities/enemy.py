@@ -1,5 +1,6 @@
 import os
 import pygame
+from ..settings import HITBOX_WIDTH, HITBOX_HEIGHT
 
 
 class Enemy:
@@ -25,8 +26,12 @@ class Enemy:
         self.rect = pygame.Rect(x, y, self.width, self.height)
         
         # Much larger to match sprite size better
-        self.hitbox_width = 74
-        self.hitbox_height = 74
+        # Hitbox size (use global constants)
+        self.hitbox_width = HITBOX_WIDTH
+        self.hitbox_height = HITBOX_HEIGHT
+        # Hitbox offset from sprite rect.topleft. Keep symmetric with Player.
+        self.hitbox_offset_x = (self.width - self.hitbox_width) // 2
+        self.hitbox_offset_y = self.height - self.hitbox_height
         
         # Movement
         self.speed = 3.0
@@ -115,7 +120,11 @@ class Enemy:
 
             if os.path.exists(path):
                 try:
-                    sheet = pygame.image.load(path).convert_alpha()
+                    # Avoid convert_alpha in headless/test envs when display not init.
+                    if pygame.display.get_init():
+                        sheet = pygame.image.load(path).convert_alpha()
+                    else:
+                        sheet = pygame.image.load(path)
                     sheet_w, sheet_h = sheet.get_size()
 
                     # Calculate frame width from total width and frame count
@@ -476,12 +485,11 @@ class Enemy:
         
         Returns a rect centered on the enemy body for realistic collision.
         """
-        # Center the hitbox horizontally
-        hitbox_x = self.rect.centerx - self.hitbox_width // 2
-        # Align to lower part of canvas (where character actually is)
-        hitbox_y = self.rect.bottom - self.hitbox_height
-        
-        return pygame.Rect(hitbox_x, hitbox_y, self.hitbox_width, self.hitbox_height)
+        # Compute hitbox top-left relative to sprite rect.topleft using explicit offsets.
+        hitbox_x = int(self.rect.x + self.hitbox_offset_x)
+        hitbox_y = int(self.rect.y + self.hitbox_offset_y)
+
+        return pygame.Rect(hitbox_x, hitbox_y, int(self.hitbox_width), int(self.hitbox_height))
 
     def get_rect(self):
         """Get the sprite drawing rect."""

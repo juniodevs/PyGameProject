@@ -1,6 +1,7 @@
 import os
 import pygame
 import random
+from ..settings import HITBOX_WIDTH, HITBOX_HEIGHT
 
 
 class Player:
@@ -14,10 +15,13 @@ class Player:
         self.width = 304
         self.height = 160
         self.rect = pygame.Rect(x, y, self.width, self.height)
-        
-        # Hitbox (same as enemy for consistency)
-        self.hitbox_width = 74
-        self.hitbox_height = 74
+
+        # Hitbox (same as enemy for consistency). Use global constants so it's easy
+        # to change the size project-wide.
+        self.hitbox_width = HITBOX_WIDTH
+        self.hitbox_height = HITBOX_HEIGHT
+        self.hitbox_offset_x = (self.width - self.hitbox_width) // 2
+        self.hitbox_offset_y = self.height - self.hitbox_height
 
         # Movement
         self.speed = 5
@@ -102,7 +106,23 @@ class Player:
                 self.animations[state] = [surf]
                 continue
 
-            sheet = pygame.image.load(path).convert_alpha()
+            # Some environments (headless tests) may not have a video mode set,
+            # which makes convert_alpha() raise. Try to use convert_alpha when
+            # available, otherwise fall back to loading without conversion.
+            try:
+                if pygame.display.get_init():
+                    sheet = pygame.image.load(path).convert_alpha()
+                else:
+                    sheet = pygame.image.load(path)
+            except Exception:
+                # If loading fails for any reason, fall back to a placeholder
+                sheet = None
+
+            if sheet is None:
+                surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+                surf.fill((255, 0, 255))
+                self.animations[state] = [surf]
+                continue
             sheet_w, sheet_h = sheet.get_size()
 
             # If frames fits horizontally
@@ -373,9 +393,9 @@ class Player:
         Returns a rect centered on the player body for realistic collision.
         Same dimensions as enemy hitbox for consistency.
         """
-        # Center the hitbox horizontally
-        hitbox_x = self.rect.centerx - self.hitbox_width // 2
-        # Align to lower part of sprite (where character actually is)
-        hitbox_y = self.rect.bottom - self.hitbox_height
-        
-        return pygame.Rect(hitbox_x, hitbox_y, self.hitbox_width, self.hitbox_height)
+        # Compute hitbox top-left relative to sprite rect.topleft using explicit offsets.
+        # This is more robust than using centerx/bottom directly and makes intent clear.
+        hitbox_x = int(self.rect.x + self.hitbox_offset_x)
+        hitbox_y = int(self.rect.y + self.hitbox_offset_y)
+
+        return pygame.Rect(hitbox_x, hitbox_y, int(self.hitbox_width), int(self.hitbox_height))
