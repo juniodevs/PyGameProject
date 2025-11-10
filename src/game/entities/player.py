@@ -16,6 +16,10 @@ class Player:
         self.width = 304
         self.height = 160
         self.rect = pygame.Rect(x, y, self.width, self.height)
+        
+        # Hitbox (same as enemy for consistency)
+        self.hitbox_width = 80
+        self.hitbox_height = 50
 
         # Movement
         self.speed = 5
@@ -25,6 +29,10 @@ class Player:
         self.gravity = 0.6
         self.on_ground = False
         self.facing = 1  # 1 = right, -1 = left
+
+        # Knockback
+        self.knockback_vel_x = 0
+        self.knockback_decay = 0.85
 
         # Animation state
         self.animations = {}  # name -> list of Surfaces
@@ -176,8 +184,13 @@ class Player:
         # Apply gravity
         self.vel_y += self.gravity
 
-        # Move
-        self.rect.x += int(self.vel_x)
+        # Apply knockback decay
+        self.knockback_vel_x *= self.knockback_decay
+        if abs(self.knockback_vel_x) < 0.1:
+            self.knockback_vel_x = 0
+
+        # Move with knockback
+        self.rect.x += int(self.vel_x + self.knockback_vel_x)
         self.rect.y += int(self.vel_y)
 
         # Floor collision
@@ -315,3 +328,16 @@ class Player:
 
     def get_rect(self):
         return self.rect
+    
+    def get_hitbox(self):
+        """Get the actual hitbox for body collision detection.
+        
+        Returns a rect centered on the player body for realistic collision.
+        Same dimensions as enemy hitbox for consistency.
+        """
+        # Center the hitbox horizontally
+        hitbox_x = self.rect.centerx - self.hitbox_width // 2
+        # Align to lower part of sprite (where character actually is)
+        hitbox_y = self.rect.bottom - self.hitbox_height
+        
+        return pygame.Rect(hitbox_x, hitbox_y, self.hitbox_width, self.hitbox_height)
