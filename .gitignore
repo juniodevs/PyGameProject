@@ -1,0 +1,99 @@
+# Byte-compiled / optimized / DLLs
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Mypy / type checkers
+.mypy_cache/
+.pyre/
+
+# Logs and databases
+*.log
+*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary / swap
+*~
+*.swp
+
+# Windows Office temporary files
+~$*
+
+# Compiled object files
+*.o
+*.obj
+
+# Python bytecode
+*.pyc
+
+# Coverage reports
+coverage.xml
+
+# Ignore build artifacts from editor or packaging tools
+pip-wheel-metadata/
+
+# If you keep secret keys or local settings, ignore them
+# .env.local
+# local_settings.py
+
+# NOTE: Keep the "src/assets/" folder tracked so you can include game images/sounds in the repo.
+# If you prefer to ignore large media, add rules here (for example: src/assets/media/)

@@ -1,3 +1,6 @@
+import pygame
+
+
 class GameApp:
     def __init__(self):
         import pygame
@@ -10,6 +13,7 @@ class GameApp:
         pygame.display.set_caption("Pygame Game")
         self.clock = pygame.time.Clock()
         self.running = True
+        self.FPS = FPS
         self.current_scene = MainMenu(self)
 
     def run(self):
@@ -18,7 +22,7 @@ class GameApp:
             self.current_scene.update()
             self.current_scene.render(self.screen)
             pygame.display.flip()
-            self.clock.tick(FPS)
+            self.clock.tick(self.FPS)
 
         pygame.quit()
 
@@ -29,4 +33,10 @@ class GameApp:
             self.current_scene.handle_event(event)
 
     def change_scene(self, scene):
+        # scene should be a class (callable) that accepts the app instance
         self.current_scene = scene(self)
+
+    def go_to_menu(self):
+        """Convenience method for scenes to return to main menu without importing it."""
+        from .scenes.main_menu import MainMenu
+        self.current_scene = MainMenu(self)

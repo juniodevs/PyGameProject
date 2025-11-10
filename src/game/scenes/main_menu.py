@@ -1,28 +1,51 @@
+import pygame
+from ..settings import WHITE
+
+
 class MainMenu:
-    def __init__(self, screen):
-        self.screen = screen
-        self.font = pygame.font.Font(None, 74)
-        self.title = self.font.render("Main Menu", True, (255, 255, 255))
-        self.start_text = self.font.render("Press Enter to Start", True, (255, 255, 255))
-        self.running = True
+    def __init__(self, app):
+        """app: reference to GameApp instance"""
+        self.app = app
+        self.screen = app.screen
+        self.font_title = pygame.font.Font(None, 72)
+        self.font = pygame.font.Font(None, 36)
+        self.title = self.font_title.render("Demo Game", True, WHITE)
+        self.start_text = self.font.render("Enter - Start", True, WHITE)
+        self.controls_lines = [
+            "Controles:",
+            "← / A  - Mover à esquerda",
+            "→ / D  - Mover à direita",
+            "Space  - Saltar",
+            "Esc    - Voltar / Sair",
+        ]
 
-    def handle_events(self):
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.running = False
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    self.start_game()
-
-    def start_game(self):
-        # Logic to transition to the gameplay scene
-        pass
+    def handle_event(self, event):
+        if event.type == pygame.QUIT:
+            self.app.running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RETURN:
+                # Change to gameplay scene
+                # import dynamically to avoid circular imports at module load time
+                import importlib
+                mod = importlib.import_module('game.scenes.gameplay')
+                Gameplay = getattr(mod, 'Gameplay')
+                self.app.change_scene(Gameplay)
+            if event.key == pygame.K_ESCAPE:
+                self.app.running = False
 
     def update(self):
         pass
 
-    def render(self):
-        self.screen.fill((0, 0, 0))
-        self.screen.blit(self.title, (self.screen.get_width() // 2 - self.title.get_width() // 2, 100))
-        self.screen.blit(self.start_text, (self.screen.get_width() // 2 - self.start_text.get_width() // 2, 300))
-        pygame.display.flip()
+    def render(self, screen):
+        screen.fill((20, 20, 40))
+        # Title
+        screen.blit(self.title, (screen.get_width() // 2 - self.title.get_width() // 2, 80))
+        # Start instruction
+        screen.blit(self.start_text, (screen.get_width() // 2 - self.start_text.get_width() // 2, 200))
+
+        # Controls
+        y = 300
+        for line in self.controls_lines:
+            text_surf = self.font.render(line, True, WHITE)
+            screen.blit(text_surf, (screen.get_width() // 2 - text_surf.get_width() // 2, y))
+            y += 36

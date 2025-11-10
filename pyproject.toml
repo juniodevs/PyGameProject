@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "pygame-game"
+name = "pygametest"
 version = "0.1.0"
 description = "A simple game built with Pygame."
-authors = ["Your Name <youremail@example.com>"]
+authors = ["Júnior Veras <iramarjuniorveras10@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
