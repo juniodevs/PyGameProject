@@ -14,6 +14,9 @@ class GameApp:
         self.clock = pygame.time.Clock()
         self.running = True
         self.FPS = FPS
+        # Time scale for slow-motion effects (1.0 = normal speed)
+        self.time_scale = 1.0
+        self.slow_motion_end = 0
         self.current_scene = MainMenu(self)
 
     def run(self):
@@ -22,7 +25,14 @@ class GameApp:
             self.current_scene.update()
             self.current_scene.render(self.screen)
             pygame.display.flip()
-            self.clock.tick(self.FPS)
+            # If a slow-motion effect is active, adjust target FPS
+            now = pygame.time.get_ticks()
+            if self.slow_motion_end and now >= self.slow_motion_end:
+                self.time_scale = 1.0
+                self.slow_motion_end = 0
+
+            target_fps = max(1, int(self.FPS * self.time_scale))
+            self.clock.tick(target_fps)
 
         pygame.quit()
 
@@ -40,3 +50,13 @@ class GameApp:
         """Convenience method for scenes to return to main menu without importing it."""
         from .scenes.main_menu import MainMenu
         self.current_scene = MainMenu(self)
+
+    def trigger_slow_motion(self, duration_ms=200, scale=0.3):
+        """Activate a brief slow-motion effect.
+
+        Args:
+            duration_ms: Duration in milliseconds
+            scale: Time scale multiplier (0 < scale <= 1)
+        """
+        self.time_scale = max(0.01, min(1.0, scale))
+        self.slow_motion_end = pygame.time.get_ticks() + int(duration_ms)

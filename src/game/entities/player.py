@@ -63,6 +63,10 @@ class Player:
         self.hit_cooldown = 0  # Cooldown between hits in milliseconds
         self.hit_cooldown_duration = 1000  # 1 second invulnerability after hit
 
+        # Flash effect when receiving damage
+        self.flash_timer = 0
+        self.flash_duration = 180  # milliseconds to flash white when hit
+
         # load sprites
         self._load_sprites()
 
@@ -158,6 +162,8 @@ class Player:
         
         self.current_hp -= amount
         self.hit_cooldown = now
+        # trigger flash effect
+        self.flash_timer = now
         
         # Play hit animation
         if self.current_hp > 0:
@@ -309,6 +315,22 @@ class Player:
 
         surface.blit(frame, self.rect.topleft)
 
+        # If flashing (just got hit), draw a white-tinted version of the sprite
+        now = pygame.time.get_ticks()
+        if getattr(self, 'flash_timer', 0) and now - self.flash_timer < self.flash_duration:
+            # Create a white-tinted copy of the frame that preserves the sprite alpha
+            try:
+                white_frame = frame.copy()
+                # Add white to RGB channels while preserving alpha (quick tint)
+                # Use BLEND_RGB_ADD so we don't change per-pixel alpha (prevents tinting transparent background)
+                white_frame.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
+                surface.blit(white_frame, self.rect.topleft)
+            except Exception:
+                # Fallback to rectangular overlay if something goes wrong
+                overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
+                overlay.fill((255, 255, 255, 180))
+                surface.blit(overlay, self.rect.topleft)
+
     def draw_at(self, surface, pos):
         """Draw player sprite at a specific screen position (used by camera system).
         
@@ -328,6 +350,19 @@ class Player:
             frame = pygame.transform.flip(frame, True, False)
 
         surface.blit(frame, pos)
+
+        # Flash overlay when damaged (only over sprite silhouette)
+        now = pygame.time.get_ticks()
+        if getattr(self, 'flash_timer', 0) and now - self.flash_timer < self.flash_duration:
+            try:
+                white_frame = frame.copy()
+                # Use RGB add so alpha stays untouched
+                white_frame.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
+                surface.blit(white_frame, pos)
+            except Exception:
+                overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
+                overlay.fill((255, 255, 255, 180))
+                surface.blit(overlay, pos)
 
     def get_rect(self):
         return self.rect

@@ -59,6 +59,10 @@ class Enemy:
         self.hit_cooldown_duration = 600  # Invulnerability after hit
         self.death_time = 0  # Track when enemy died (for removal after animation)
 
+        # Flash effect when receiving damage
+        self.flash_timer = 0
+        self.flash_duration = 180
+
         # AI behavior
         self.detection_range = 500  # How far can detect player
         self.attack_distance = 200  # Distance to start attacking
@@ -344,6 +348,9 @@ class Enemy:
         self.current_hp -= amount
         self.hit_cooldown = now
 
+        # trigger flash effect
+        self.flash_timer = now
+
         # Knockback away from attacker
         knockback_strength = 15
         self.knockback_vel_x = knockback_strength * knockback_direction
@@ -418,6 +425,19 @@ class Enemy:
         screen_y = self.rect.y - camera_y
         surface.blit(frame, (screen_x, screen_y))
 
+        # Flash overlay when damaged (only over sprite silhouette)
+        now = pygame.time.get_ticks()
+        if getattr(self, 'flash_timer', 0) and now - self.flash_timer < self.flash_duration:
+            try:
+                white_frame = frame.copy()
+                # Use RGB add so alpha stays untouched
+                white_frame.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
+                surface.blit(white_frame, (screen_x, screen_y))
+            except Exception:
+                overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
+                overlay.fill((255, 255, 255, 180))
+                surface.blit(overlay, (screen_x, screen_y))
+
     def draw_at(self, surface, pos):
         """Draw enemy sprite at a specific screen position.
         
@@ -437,6 +457,19 @@ class Enemy:
             frame = pygame.transform.flip(frame, True, False)
 
         surface.blit(frame, pos)
+
+        # Flash overlay when damaged (only over sprite silhouette)
+        now = pygame.time.get_ticks()
+        if getattr(self, 'flash_timer', 0) and now - self.flash_timer < self.flash_duration:
+            try:
+                white_frame = frame.copy()
+                # Use RGB add so alpha stays untouched
+                white_frame.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
+                surface.blit(white_frame, pos)
+            except Exception:
+                overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
+                overlay.fill((255, 255, 255, 180))
+                surface.blit(overlay, pos)
 
     def get_hitbox(self):
         """Get the actual hitbox for body collision detection.

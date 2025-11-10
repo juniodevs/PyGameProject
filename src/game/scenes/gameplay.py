@@ -125,9 +125,6 @@ class Gameplay:
         if player_screen_rect.right > 0 and player_screen_rect.left < self.screen_width:
             self.player.draw_at(screen, player_screen_rect.topleft)
 
-        # Debug: Draw collision hitboxes
-        self._draw_debug_hitboxes(screen)
-
         # HUD / instructions (fixed to screen, not affected by camera)
         instr = self.font.render('Esc - Voltar ao Menu', True, BLACK)
         screen.blit(instr, (10, 10))
@@ -256,7 +253,21 @@ class Gameplay:
                 # Knockback player back from enemy
                 knockback_strength = 10
                 self.player.knockback_vel_x = knockback_strength * (-self.player.facing)
-                
+                # Trigger visual/audio feedback: slow-motion + screen shake when dealing damage
+                now = pygame.time.get_ticks()
+                # Player just dealt damage -> brief slow motion and shake
+                try:
+                    self.app.trigger_slow_motion(duration_ms=220, scale=0.35)
+                except Exception:
+                    pass
+                try:
+                    self.camera.start_shake(duration_ms=260, magnitude=8)
+                except Exception:
+                    pass
+
+                # Also briefly flash the player to emphasize the hit-deal action
+                self.player.flash_timer = now
+
                 if killed:
                     # Enemy died
                     pass
@@ -290,6 +301,16 @@ class Gameplay:
                 # Knockback player away from enemy
                 knockback_strength = 15
                 self.player.knockback_vel_x = knockback_strength * (-enemy.facing)
+
+                # Trigger visual feedback: slow-motion + screen shake when player receives damage
+                try:
+                    self.app.trigger_slow_motion(duration_ms=220, scale=0.35)
+                except Exception:
+                    pass
+                try:
+                    self.camera.start_shake(duration_ms=260, magnitude=10)
+                except Exception:
+                    pass
 
     def _draw_enemy_hp(self, screen, enemy, enemy_screen_rect):
         """Draw enemy HP bar above the enemy sprite."""

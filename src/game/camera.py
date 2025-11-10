@@ -1,5 +1,9 @@
-"""Camera system that follows the player."""
+"""Camera system that follows the player.
+
+Adds simple screen shake support via start_shake(duration_ms, magnitude).
+"""
 import pygame
+import random
 
 
 class Camera:
@@ -27,6 +31,12 @@ class Camera:
         self.x = 0
         self.y = 0
 
+        # Screen shake state
+        self.shake_magnitude = 0
+        self.shake_end = 0
+        self.offset_x = 0
+        self.offset_y = 0
+
     def update(self, target_rect):
         """Update camera to follow target (usually the player).
         
@@ -41,6 +51,25 @@ class Camera:
         self.x = max(0, min(self.x, self.world_width - self.screen_width))
         self.y = max(0, min(self.y, self.world_height - self.screen_height))
 
+        # Apply screen shake if active
+        now = pygame.time.get_ticks()
+        if self.shake_end and now < self.shake_end:
+            self.offset_x = random.randint(-self.shake_magnitude, self.shake_magnitude)
+            self.offset_y = random.randint(-self.shake_magnitude, self.shake_magnitude)
+        else:
+            self.offset_x = 0
+            self.offset_y = 0
+
+    def start_shake(self, duration_ms=300, magnitude=8):
+        """Start a screen shake effect.
+
+        Args:
+            duration_ms: How long the shake lasts in milliseconds
+            magnitude: Max pixel offset for shake
+        """
+        self.shake_magnitude = magnitude
+        self.shake_end = pygame.time.get_ticks() + duration_ms
+
     def apply(self, rect):
         """Convert world coordinates to screen coordinates.
         
@@ -50,7 +79,7 @@ class Camera:
         Returns:
             pygame.Rect in screen space (relative to camera view)
         """
-        return rect.move(-self.x, -self.y)
+        return rect.move(-self.x - self.offset_x, -self.y - self.offset_y)
 
     def apply_point(self, x, y):
         """Convert a point from world coordinates to screen coordinates.
@@ -61,7 +90,7 @@ class Camera:
         Returns:
             Tuple (screen_x, screen_y)
         """
-        return (x - self.x, y - self.y)
+        return (x - self.x - self.offset_x, y - self.y - self.offset_y)
 
     def get_viewport_rect(self):
         """Get the visible area of the world in world coordinates.
