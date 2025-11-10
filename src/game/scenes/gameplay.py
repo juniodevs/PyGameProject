@@ -1,8 +1,7 @@
 import pygame
 from ..settings import WHITE, BLACK
 from ..entities.player import Player
-from ..entities.enemy import Enemy
-from ..entities.projectile import Projectile
+from ..camera import Camera
 
 
 class Gameplay:
@@ -11,20 +10,23 @@ class Gameplay:
         self.screen = app.screen
         self.screen_width = self.screen.get_width()
         self.screen_height = self.screen.get_height()
-        # Ground Y coordinate
-        self.ground_y = self.screen_height - 80
-
-        # Create player and enemy
-        self.player = Player(100, self.ground_y - 50)
-        # Enemy patrol between x=300 and x=700
-        self.enemy = Enemy(400, self.ground_y - 40, min_x=300, max_x=700)
-
+        
+        # Expanded world/map dimensions (much larger than screen)
+        # This allows the player to move around in a larger world
+        self.world_width = 2400  # 3x screen width for horizontal exploration
+        self.world_height = 2400  # Match width for square-ish world proportions
+        
+        # Ground Y coordinate (in world space)
+        self.ground_y = self.world_height - 150
+        
+        # Create player in the world (starting position)
+        # Player height is 160, so position it appropriately on the ground
+        self.player = Player(400, self.ground_y - 160)
+        
+        # Initialize camera to follow the player
+        self.camera = Camera(self.screen_width, self.screen_height, self.world_width, self.world_height)
+        
         self.font = pygame.font.Font(None, 28)
-        # Projectiles list
-        self.projectiles = []
-        # Cooldown in milliseconds
-        self.shoot_cooldown_ms = 2000
-        self.last_shot_time = 0
 
     def handle_event(self, event):
         if event.type == pygame.QUIT:
@@ -33,60 +35,46 @@ class Gameplay:
             if event.key == pygame.K_ESCAPE:
                 # Return to main menu
                 self.app.go_to_menu()
-            # Shoot projectile with Ctrl (left or right)
+            # Attack with Ctrl -> call player's attack animation
             if event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
-                now = pygame.time.get_ticks()
-                if now - self.last_shot_time >= self.shoot_cooldown_ms:
-                    # create projectile at player's center, going in facing direction
-                    p_x = self.player.rect.centerx
-                    p_y = self.player.rect.centery
-                    proj = Projectile(p_x, p_y, direction=self.player.facing)
-                    self.projectiles.append(proj)
-                    self.last_shot_time = now
+                self.player.attack()
 
     def update(self):
         keys = pygame.key.get_pressed()
         self.player.handle_input(keys)
-        self.player.update(self.screen_width, self.screen_height, self.ground_y)
-        self.enemy.move()
-
-        # Update projectiles
-        for proj in list(self.projectiles):
-            proj.update()
-            # remove if off-screen
-            if proj.rect.right < 0 or proj.rect.left > self.screen_width:
-                try:
-                    self.projectiles.remove(proj)
-                except ValueError:
-                    pass
-            # collision with enemy
-            elif proj.get_rect().colliderect(self.enemy.rect):
-                # For demo: go back to menu on hit
-                self.app.go_to_menu()
-
-        # Collision: if player collides with enemy, go back to menu (demo behavior)
-        if self.player.get_rect().colliderect(self.enemy.rect):
-            # For demo, go back to menu on collision
-            self.app.go_to_menu()
+        # Player update uses world dimensions instead of screen dimensions
+        self.player.update(self.world_width, self.world_height, self.ground_y)
+        # Update camera to follow the player
+        self.camera.update(self.player.rect)
 
     def render(self, screen):
-        # Background
+        # Background (fill screen with sky color)
         screen.fill((120, 180, 255))
 
-        # Ground
-        pygame.draw.rect(screen, (80, 200, 80), (0, self.ground_y, self.screen_width, self.screen_height - self.ground_y))
+        # Calculate ground position in screen space
+        ground_screen_y = self.ground_y - self.camera.y
+        
+        # Draw ground (extends across the screen)
+        if ground_screen_y < self.screen_height:
+            pygame.draw.rect(
+                screen,
+                (80, 200, 80),
+                (0, ground_screen_y, self.screen_width, self.screen_height - ground_screen_y)
+            )
 
-        # Draw entities
-        self.player.draw(screen)
-        self.enemy.draw(screen)
+        # Draw player (convert to screen coordinates)
+        player_screen_rect = self.camera.apply(self.player.rect)
+        # Only draw if on screen
+        if player_screen_rect.right > 0 and player_screen_rect.left < self.screen_width:
+            self.player.draw_at(screen, player_screen_rect.topleft)
 
-        # Draw projectiles
-        for proj in self.projectiles:
-            proj.draw(screen)
-
-        # HUD / instructions
+        # HUD / instructions (fixed to screen, not affected by camera)
         instr = self.font.render('Esc - Voltar ao Menu', True, BLACK)
         screen.blit(instr, (10, 10))
+        
+        # Debug: show camera position
+        cam_debug = self.font.render(f'Cam: ({int(self.camera.x)}, {int(self.camera.y)})', True, BLACK)
+        screen.blit(cam_debug, (10, 40))
 
     def update_events(self):
         # Not used: we handle single events via handle_event called by app

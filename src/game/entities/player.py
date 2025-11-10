@@ -1,21 +1,112 @@
+import os
 import pygame
+import random
 
 
 class Player:
+    """Player with sprite-based animations.
+
+    Animations are loaded from src/assets/images/player and scaled to 38x20.
+    State machine handles smooth transitions between idle/run/turn/attack/jump/fall/hit/death.
+    """
+
     def __init__(self, x, y):
-        self.width = 50
-        self.height = 50
+        # target logical size for the sprite frames (increased size)
+        # Updated to 304x160 as per requirements
+        self.width = 304
+        self.height = 160
         self.rect = pygame.Rect(x, y, self.width, self.height)
+
+        # Movement
         self.speed = 5
         self.vel_x = 0
         self.vel_y = 0
         self.jump_power = -12
         self.gravity = 0.6
         self.on_ground = False
-        # direction player is facing: 1 = right, -1 = left
-        self.facing = 1
+        self.facing = 1  # 1 = right, -1 = left
+
+        # Animation state
+        self.animations = {}  # name -> list of Surfaces
+        self.state = 'idle'
+        self.anim_index = 0
+        self.last_anim_time = pygame.time.get_ticks()
+        # milliseconds per frame (can be tuned per animation)
+        self.frame_durations = {
+            'idle': 100,
+            'run': 80,
+            'turn': 80,
+            'attack1': 80,
+            'attack2': 70,
+            'jump': 120,
+            'jump_trans': 80,
+            'fall': 120,
+            'fall_trans': 80,
+            'hit': 250,
+            'death': 100,
+        }
+
+        # Attack toggle to alternate between attack1 and attack2
+        self._next_attack_is_two = False
+        # Lock movement while certain animations play
+        self.locked = False
+
+        # load sprites
+        self._load_sprites()
+
+    def _load_sprites(self):
+        """Load and slice spritesheets from assets/images/player.
+
+        Assumes files are named like `_Idle.png`, `_Run.png`, etc. Frame counts follow the spec.
+        """
+        base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        assets_dir = os.path.join(base, 'assets', 'images', 'player')
+
+        # mapping animation name -> (filename without leading underscore, frame_count)
+        mapping = {
+            'idle': ('Idle', 10),
+            'run': ('Run', 10),
+            'turn': ('TurnAround', 3),
+            'attack1': ('Attack', 4),
+            'attack2': ('Attack2', 6),
+            'jump': ('Jump', 3),
+            'jump_trans': ('JumpFallInbetween', 2),
+            'fall': ('Fall', 3),
+            'hit': ('Hit', 1),
+            'death': ('Death', 10),
+        }
+
+        for state, (name, frames) in mapping.items():
+            fname = f'_{name}.png'
+            path = os.path.join(assets_dir, fname)
+            if not os.path.exists(path):
+                # fallback: create a simple colored surface so game won't crash
+                surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+                surf.fill((255, 0, 255))
+                self.animations[state] = [surf]
+                continue
+
+            sheet = pygame.image.load(path).convert_alpha()
+            sheet_w, sheet_h = sheet.get_size()
+
+            # If frames fits horizontally
+            frame_w = max(1, sheet_w // frames)
+            frames_list = []
+            for i in range(frames):
+                rect = pygame.Rect(i * frame_w, 0, frame_w, sheet_h)
+                frame = pygame.Surface(rect.size, pygame.SRCALPHA)
+                frame.blit(sheet, (0, 0), rect)
+                # scale to target size
+                frame = pygame.transform.smoothscale(frame, (self.width, self.height))
+                frames_list.append(frame)
+
+            self.animations[state] = frames_list
 
     def handle_input(self, keys):
+        # If locked (e.g., during attack animations) allow minimal movement if desired
+        if self.locked:
+            return
+
         self.vel_x = 0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             self.vel_x = -self.speed
@@ -27,9 +118,28 @@ class Player:
             self.vel_y = self.jump_power
             self.on_ground = False
 
+    def attack(self):
+        """Trigger an attack. Alternates between attack1 and attack2 for variety."""
+        if self.state.startswith('attack') or self.state == 'death':
+            return
+        self._next_attack_is_two = not self._next_attack_is_two
+        self.state = 'attack2' if self._next_attack_is_two else 'attack1'
+        self.anim_index = 0
+        self.last_anim_time = pygame.time.get_ticks()
+        # lock movement briefly while attacking
+        self.locked = True
+
+    def _set_state(self, new_state):
+        if new_state == self.state:
+            return
+        self.state = new_state
+        self.anim_index = 0
+        self.last_anim_time = pygame.time.get_ticks()
+
     def update(self, screen_width, screen_height, ground_y):
         # Apply gravity
         self.vel_y += self.gravity
+
         # Move
         self.rect.x += int(self.vel_x)
         self.rect.y += int(self.vel_y)
@@ -38,7 +148,10 @@ class Player:
         if self.rect.bottom >= ground_y:
             self.rect.bottom = ground_y
             self.vel_y = 0
+            # If was falling or jumping, land
             self.on_ground = True
+        else:
+            self.on_ground = False
 
         # Keep inside horizontal bounds
         if self.rect.left < 0:
@@ -46,8 +159,111 @@ class Player:
         if self.rect.right > screen_width:
             self.rect.right = screen_width
 
+        # Decide animation state based on velocities and flags
+        # Death/hit take precedence (not implemented death trigger here)
+        if self.state == 'death':
+            # play death until finished (no transitions)
+            self._update_animation(loop=False)
+            return
+
+        # If attacking, advance attack animation and unlock when finished
+        if self.state.startswith('attack'):
+            finished = self._update_animation(loop=False)
+            if finished:
+                # return to run or idle depending on vel_x
+                self.locked = False
+                if abs(self.vel_x) > 0:
+                    self._set_state('run')
+                else:
+                    self._set_state('idle')
+            return
+
+        # In air -> jump or fall
+        if not self.on_ground:
+            if self.vel_y < 0:
+                # going up -> jump
+                # If we just switched from falling, play jump_trans first
+                if self.state == 'fall' and 'jump_trans' in self.animations:
+                    self._set_state('jump_trans')
+                else:
+                    self._set_state('jump')
+            else:
+                # going down -> fall. If we were in jump, insert transition
+                if self.state == 'jump' and 'jump_trans' in self.animations:
+                    self._set_state('jump_trans')
+                else:
+                    self._set_state('fall')
+        else:
+            # On ground: run or idle
+            if abs(self.vel_x) > 0:
+                # turning quickly? use turn animation when velocity reverses
+                if (self.vel_x > 0 and self.facing < 0) or (self.vel_x < 0 and self.facing > 0):
+                    self._set_state('turn')
+                else:
+                    self._set_state('run')
+            else:
+                self._set_state('idle')
+
+        # advance animation normally
+        self._update_animation(loop=True)
+
+    def _update_animation(self, loop=True):
+        """Advance animation frames based on time.
+
+        Returns True if a non-looping animation finished on this update.
+        """
+        now = pygame.time.get_ticks()
+        key = self.state
+        frames = self.animations.get(key, None)
+        if not frames:
+            return True
+
+        dur = self.frame_durations.get(key, 100)
+        if now - self.last_anim_time >= dur:
+            self.anim_index += 1
+            self.last_anim_time = now
+            if self.anim_index >= len(frames):
+                if loop:
+                    self.anim_index = 0
+                else:
+                    # clamp to last frame and report finished
+                    self.anim_index = len(frames) - 1
+                    return True
+        return False
+
     def draw(self, surface):
-        pygame.draw.rect(surface, (0, 200, 0), self.rect)
+        frames = self.animations.get(self.state, None)
+        if not frames:
+            # fallback visual
+            pygame.draw.rect(surface, (0, 200, 0), self.rect)
+            return
+
+        frame = frames[self.anim_index % len(frames)]
+        # flip if facing left
+        if self.facing < 0:
+            frame = pygame.transform.flip(frame, True, False)
+
+        surface.blit(frame, self.rect.topleft)
+
+    def draw_at(self, surface, pos):
+        """Draw player sprite at a specific screen position (used by camera system).
+        
+        Args:
+            surface: pygame surface to draw on
+            pos: tuple (x, y) position on screen in pixels
+        """
+        frames = self.animations.get(self.state, None)
+        if not frames:
+            # fallback visual
+            pygame.draw.rect(surface, (0, 200, 0), (*pos, self.width, self.height))
+            return
+
+        frame = frames[self.anim_index % len(frames)]
+        # flip if facing left
+        if self.facing < 0:
+            frame = pygame.transform.flip(frame, True, False)
+
+        surface.blit(frame, pos)
 
     def get_rect(self):
         return self.rect
