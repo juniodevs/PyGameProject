@@ -49,7 +49,7 @@ class MainMenu:
         except Exception:
             pass
         try:
-            self.app.audio.play_menu_music('menumusic', target_volume=0.1, ramp_ms=5000, fade_ms=800)
+            self.app.audio.play_menu_music('menumusic', ramp_ms=5000, fade_ms=200)
         except Exception:
             pass
 

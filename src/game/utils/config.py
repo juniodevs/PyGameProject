@@ -2,8 +2,8 @@ import json
 import os
 
 DEFAULTS = {
-    "music_volume": 0.6,
-    "sfx_volume": 1.0,
+    "music_volume": 0.2,
+    "sfx_volume": 0.2,
     "master_volume": 1.0
 }
 

@@ -35,7 +35,7 @@ class Gameplay:
         except Exception:
             pass
         try:
-            self.app.audio.start_battle_music(('battlemusic1','battlemusic2'), target_volume=0.8, crossfade_s=3.0)
+            self.app.audio.start_battle_music(('battlemusic1','battlemusic2') , crossfade_s=3.0)
         except Exception:
             pass
 
@@ -44,7 +44,8 @@ class Gameplay:
         self.is_dead = False
         self.death_time = 0  
         self.death_countdown = 5  
-        self.attack_cooldown_ms = 500
+
+        self.attack_cooldown_ms = 1000
         self.last_attack_time = 0
 
         self.paused = False
@@ -125,11 +126,10 @@ class Gameplay:
                 if now - self.last_attack_time >= self.attack_cooldown_ms:
                     self.last_attack_time = now
                     try:
-                        self.app.audio.play_variant('attack')
+                        self.app.audio.play_sound_effect('attack', pitch=1.1, bitcrush=1, distortion=0.03, volume=0.9)
                     except Exception:
                         pass
                     self.player.attack()
-
 
     def update(self):
 
@@ -222,7 +222,7 @@ class Gameplay:
             color = (255, 220, 100) if i == self.pause_index else (255, 255, 255)
             text = self._choose_game_font(28).render(opt, True, color)
             text_x = w // 2 - text.get_width() // 2
-            # draw a left arrow indicator for the selected option (triangle) to avoid depending on glyphs
+
             if i == self.pause_index:
                 arrow_x = text_x - 40
                 center_y = y + text.get_height() // 2
@@ -232,7 +232,6 @@ class Gameplay:
             screen.blit(text, (text_x, y))
             y += 56
 
-        # Instruction hint below pause options with up/down icons
         hint_prefix = 'Use '
         hint_suffix = ' para navegar • Enter selecionar'
         try:
@@ -246,10 +245,10 @@ class Gameplay:
             hint_y = y + 6
             screen.blit(prefix_surf, (hint_x, hint_y))
             hx = hint_x + prefix_surf.get_width()
-            # up arrow
+
             self._draw_arrow_icon(screen, hx, hint_y, 'up', (240, 220, 160))
             hx += arrow_w + gap
-            # down arrow
+
             self._draw_arrow_icon(screen, hx, hint_y, 'down', (240, 220, 160))
             hx += arrow_w + gap
             screen.blit(suffix_surf, (hx, hint_y))
@@ -367,8 +366,33 @@ class Gameplay:
                     pass
 
                 try:
-                    self.app.audio.play_variant('attack')
-                    self.app.audio.play_variant('hit')
+                    self.app.audio.play_sound_effect(
+                        'attack',
+                        pitch=1.1,
+                        bitcrush=1,
+                        distortion=0.03,
+                        volume=0.9,
+                        layers=[
+                            {'pitch': 1.0, 'bitcrush': 0, 'gain': 0.6},
+                            {'pitch': 1.2, 'bitcrush': 2, 'gain': 0.4},
+                        ],
+                        async_process=True,
+                        cache=True,
+                    )
+
+                    self.app.audio.play_sound_effect(
+                        'hit',
+                        pitch=0.95,
+                        bitcrush=2,
+                        distortion=0.06,
+                        volume=1.0,
+                        layers=[
+                            {'pitch': 1.0, 'bitcrush': 0, 'gain': 0.5},
+                            {'pitch': 0.8, 'bitcrush': 3, 'gain': 0.5},
+                        ],
+                        async_process=True,
+                        cache=True,
+                    )
                 except Exception:
                     pass
                 try:
@@ -379,7 +403,20 @@ class Gameplay:
                 if killed:
 
                     try:
-                        self.app.audio.play_variant('die')
+
+                        self.app.audio.play_sound_effect(
+                            'die',
+                            pitch=0.9,
+                            bitcrush=3,
+                            distortion=0.12,
+                            volume=0.9,
+                            layers=[
+                                {'pitch': 1.0, 'bitcrush': 0, 'gain': 0.5},
+                                {'pitch': 0.85, 'bitcrush': 4, 'gain': 0.5},
+                            ],
+                            async_process=True,
+                            cache=True,
+                        )
                     except Exception:
                         pass
 
@@ -466,7 +503,6 @@ class Gameplay:
         hp_text = hp_font.render(f'{enemy.current_hp}/{enemy.max_hp}', True, (255, 255, 255))
         text_rect = hp_text.get_rect(center=(enemy_screen_rect.centerx, bar_y - 12))
         screen.blit(hp_text, text_rect)
-
 
     def _spawn_new_enemy(self):
         """Spawn a new enemy at a random location on the map."""
