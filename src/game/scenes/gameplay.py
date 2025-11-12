@@ -3,6 +3,7 @@ import random
 from ..settings import WHITE, ATTACK_RANGE, ATTACK_HEIGHT_FACTOR
 from ..entities.player import Player
 from ..entities.enemy import Enemy
+from ..entities.health import Health
 from ..camera import Camera
 from ..background import ParallaxBackground
 
@@ -25,6 +26,11 @@ class Gameplay:
         self.enemies.append(test_enemy)
 
         self.kill_count = 0
+
+        # Health pickup state: only one exists at a time. When collected, schedule respawn
+        # next_health_spawn_time is in milliseconds since pygame start (0 = not scheduled)
+        self.health_pickup = None
+        self.next_health_spawn_time = 0
 
         self.camera = Camera(self.screen_width, self.screen_height, self.world_width, self.world_height)
 
@@ -269,6 +275,25 @@ class Gameplay:
 
             self.enemies = [e for e in self.enemies if not (e.current_hp <= 0 and now - e.death_time > 1000)]
 
+            # Health spawn / respawn handling (single pickup)
+            if self.health_pickup is None:
+                # if no pickup exists and no spawn pending, spawn immediately
+                if self.next_health_spawn_time == 0:
+                    self._spawn_health()
+                else:
+                    # if spawn time reached, spawn the pickup
+                    if now >= self.next_health_spawn_time:
+                        self._spawn_health()
+            else:
+                # allow the pickup to perform any per-frame logic if needed
+                try:
+                    self.health_pickup.update()
+                except Exception:
+                    pass
+
+            # Check for player collecting the health pickup
+            self._check_health_collision()
+
             if self.player.current_hp <= 0 and not self.is_dead:
                 self.is_dead = True
                 self.death_time = now
@@ -306,6 +331,15 @@ class Gameplay:
                 enemy.draw_at(screen, enemy_screen_rect.topleft)
 
                 self._draw_enemy_hp(screen, enemy, enemy_screen_rect)
+
+        # Draw health pickup (if present)
+        if getattr(self, 'health_pickup', None):
+            try:
+                hp_screen_rect = self.camera.apply(self.health_pickup.rect)
+                if hp_screen_rect.right > 0 and hp_screen_rect.left < self.screen_width:
+                    self.health_pickup.draw_at(screen, hp_screen_rect.topleft)
+            except Exception:
+                pass
 
         player_screen_rect = self.camera.apply(self.player.rect)
 
@@ -660,6 +694,66 @@ class Gameplay:
         spawn_y = self.ground_y - 160
         new_enemy = Enemy(spawn_x, spawn_y)
         self.enemies.append(new_enemy)
+
+
+    def _spawn_health(self):
+        """Spawn a health pickup somewhere on the map, ensuring it's a reasonable distance from the player.
+
+        This creates at most one pickup; callers should check `self.health_pickup` to avoid duplicates.
+        """
+        import random
+
+        min_spawn_dist = 300
+        attempts = 0
+        while True:
+            spawn_x = random.randint(100, self.world_width - 100)
+            # ensure not too close to player
+            if abs(spawn_x - self.player.rect.centerx) > min_spawn_dist:
+                break
+            attempts += 1
+            if attempts > 30:
+                # give up and use whatever we have
+                break
+
+        # place the pickup slightly above the ground so its hitbox overlaps the player's hitbox
+        # when the player is standing on the ground. The health image still appears near the ground.
+        spawn_y = self.ground_y - 48 - 12
+        try:
+            self.health_pickup = Health(spawn_x, spawn_y)
+        except Exception:
+            # robust fallback: create a very simple rect-based placeholder
+            import pygame
+            h = Health(spawn_x, spawn_y)
+            self.health_pickup = h
+
+        # clear any scheduled spawn time since we've spawned it
+        self.next_health_spawn_time = 0
+
+
+    def _check_health_collision(self):
+        """Check whether the player collected the health pickup. If so, heal and schedule respawn in 30s."""
+        if not getattr(self, 'health_pickup', None):
+            return
+
+        try:
+            player_hb = self.player.get_hitbox()
+            health_hb = self.health_pickup.get_hitbox()
+            if player_hb.colliderect(health_hb):
+                # Only collect if player is not at full HP. If at max HP, do nothing
+                # so the pickup remains in the world and the player can pass over it.
+                if self.player.current_hp < self.player.max_hp:
+                    old_hp = self.player.current_hp
+                    self.player.current_hp = min(self.player.max_hp, self.player.current_hp + 1)
+                    # remove pickup and schedule next spawn in 30s
+                    self.health_pickup = None
+                    self.next_health_spawn_time = pygame.time.get_ticks() + 30000
+                    # play pickup sfx if available
+                    try:
+                        self.app.audio.play_sound_effect('heal')
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
     def update_events(self):
         pass
