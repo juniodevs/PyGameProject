@@ -55,7 +55,7 @@ class Enemy:
         self.max_hp = 4  
         self.current_hp = 4
         self.hit_cooldown = 0
-        self.hit_cooldown_duration = 600  
+        self.hit_cooldown_duration = 300  
         self.death_time = 0  
 
         self.flash_timer = 0
@@ -243,9 +243,16 @@ class Enemy:
                     self.vel_x = -self.speed  
                 else:
                     self.vel_x = self.speed   
-            else:
+                self.pursuing = True
+                return
 
+            if dist < self.attack_distance and self.attack_cooldown == 0:
+                self.attack()
                 self.vel_x = 0
+                self.pursuing = True
+                return
+
+            self.vel_x = 0
             self.pursuing = True
             return
 

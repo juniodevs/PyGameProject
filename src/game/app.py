@@ -31,6 +31,18 @@ class GameApp:
                 def preload_folder(self, *a, **k):
                     return 0
             self.audio = _NullAudio()
+        # Load persisted config (music/sfx volumes) if available and apply to audio manager
+        try:
+            from .utils.config import load_config
+            cfg = load_config()
+            try:
+                self.audio.set_music_volume(cfg.get('music_volume', 0.6))
+                self.audio.set_sfx_volume(cfg.get('sfx_volume', 1.0))
+                self.audio.set_master_volume(cfg.get('master_volume', 1.0))
+            except Exception:
+                pass
+        except Exception:
+            pass
         # actual display surface
         self.display = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Pygame Game")

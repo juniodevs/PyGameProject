@@ -3,11 +3,6 @@ import pygame
 from ..settings import HITBOX_WIDTH, HITBOX_HEIGHT
 
 class Player:
-    """Player with sprite-based animations.
-
-    Animations are loaded from src/assets/images/player and scaled to 38x20.
-    State machine handles smooth transitions between idle/run/turn/attack/jump/fall/hit/death.
-    """
 
     def __init__(self, x, y):
         self.width = 304

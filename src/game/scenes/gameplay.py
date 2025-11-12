@@ -31,19 +31,27 @@ class Gameplay:
         self.background = ParallaxBackground(self.screen_width, self.screen_height, self.world_width, self.ground_y)
 
         try:
-            self.app.audio.crossfade_music('gameplay', fade_ms=800)
+            self.app.audio.stop_music(fade_ms=600)
+        except Exception:
+            pass
+        try:
+            self.app.audio.start_battle_music(('battlemusic1','battlemusic2') , crossfade_s=3.0)
         except Exception:
             pass
 
         self.font = self._choose_game_font(28)
 
-        self.debug_attacks = False  
-
         self.is_dead = False
         self.death_time = 0  
         self.death_countdown = 5  
-        self.attack_cooldown_ms = 500
+
+        self.attack_cooldown_ms = 1000
         self.last_attack_time = 0
+
+        self.paused = False
+        self.pause_index = 0
+        self.pause_options = ['CONTINUAR', 'CONFIGURAÇÃO', 'VOLTAR PARA O MENU']
+        self.config_overlay = None
 
     def _choose_game_font(self, size, bold=False):
         """Pick a game-like font if available, otherwise fall back to system default.
@@ -72,28 +80,65 @@ class Gameplay:
     def handle_event(self, event):
         if event.type == pygame.QUIT:
             self.app.running = False
+        if getattr(self, 'config_overlay', None):
+            try:
+                self.config_overlay.handle_event(event)
+                return
+            except Exception:
+
+                try:
+                    self.config_overlay._done()
+                except Exception:
+                    pass
+                self.config_overlay = None
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
 
-                self.app.go_to_menu()
+                if self.config_overlay:
+
+                    self.config_overlay._done()
+                    self.config_overlay = None
+                else:
+                    self.paused = not self.paused
+
+                return
+
+            if self.paused:
+                if event.key in (pygame.K_UP,):
+                    self.pause_index = (self.pause_index - 1) % len(self.pause_options)
+                elif event.key in (pygame.K_DOWN,):
+                    self.pause_index = (self.pause_index + 1) % len(self.pause_options)
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    choice = self.pause_options[self.pause_index]
+                    if choice == 'CONTINUAR':
+                        self.paused = False
+                    elif choice == 'CONFIGURAÇÃO':
+
+                        from .config_menu import ConfigMenu
+                        self.config_overlay = ConfigMenu(self.app, on_done=self._close_config)
+                    elif choice == 'VOLTAR PARA O MENU':
+                        self.app.go_to_menu()
+
+                return
 
             if event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
                 now = pygame.time.get_ticks()
                 if now - self.last_attack_time >= self.attack_cooldown_ms:
                     self.last_attack_time = now
                     try:
-                        self.app.audio.play_variant('attack')
+                        self.app.audio.play_sound_effect('attack', pitch=1.1, bitcrush=1, distortion=0.03, volume=0.9)
                     except Exception:
                         pass
                     self.player.attack()
 
-            if event.key == pygame.K_h:
-                self.player.take_damage(1)
-
     def update(self):
+
+        if self.paused or self.config_overlay:
+
+            return
+
         keys = pygame.key.get_pressed()
         self.player.handle_input(keys)
-
         self.player.update(self.world_width, self.world_height, self.ground_y)
 
         for enemy in self.enemies:
@@ -127,6 +172,9 @@ class Gameplay:
 
         self.camera.update(self.player.rect)
 
+    def _close_config(self):
+        self.config_overlay = None
+
     def render(self, screen):
 
         self.background.draw(screen, self.camera)
@@ -154,6 +202,76 @@ class Gameplay:
 
         if self.is_dead:
             self._draw_death_countdown(screen)
+
+        if self.paused:
+            self._render_pause(screen)
+        if self.config_overlay:
+            self.config_overlay.render(screen)
+
+    def _render_pause(self, screen):
+        w, h = screen.get_size()
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        screen.blit(overlay, (0, 0))
+
+        title = self._choose_game_font(48).render('PAUSADO', True, (255, 255, 255))
+        screen.blit(title, (w // 2 - title.get_width() // 2, 100))
+
+        y = 220
+        for i, opt in enumerate(self.pause_options):
+            color = (255, 220, 100) if i == self.pause_index else (255, 255, 255)
+            text = self._choose_game_font(28).render(opt, True, color)
+            text_x = w // 2 - text.get_width() // 2
+
+            if i == self.pause_index:
+                arrow_x = text_x - 40
+                center_y = y + text.get_height() // 2
+                pts = [(arrow_x + 28, center_y - 10), (arrow_x + 6, center_y), (arrow_x + 28, center_y + 10)]
+                pygame.draw.polygon(screen, (255, 220, 100), pts)
+
+            screen.blit(text, (text_x, y))
+            y += 56
+
+        hint_prefix = 'Use '
+        hint_suffix = ' para navegar • Enter selecionar'
+        try:
+            hint_font = self._choose_game_font(20)
+            prefix_surf = hint_font.render(hint_prefix, True, (200, 200, 200))
+            suffix_surf = hint_font.render(hint_suffix, True, (200, 200, 200))
+            arrow_w = 18
+            gap = 6
+            total_w = prefix_surf.get_width() + arrow_w + gap + arrow_w + suffix_surf.get_width()
+            hint_x = w // 2 - total_w // 2
+            hint_y = y + 6
+            screen.blit(prefix_surf, (hint_x, hint_y))
+            hx = hint_x + prefix_surf.get_width()
+
+            self._draw_arrow_icon(screen, hx, hint_y, 'up', (240, 220, 160))
+            hx += arrow_w + gap
+
+            self._draw_arrow_icon(screen, hx, hint_y, 'down', (240, 220, 160))
+            hx += arrow_w + gap
+            screen.blit(suffix_surf, (hx, hint_y))
+        except Exception:
+            pass
+
+    def _draw_arrow_icon(self, screen, x, y, direction, color=(240, 220, 160)):
+        """Draw a small triangular arrow icon at (x,y). direction in ('left','right','up','down').
+
+        x,y are the top-left of an area approx 18x18 where the icon will be drawn.
+        """
+        w = 18
+        h = 18
+        center_y = y + h // 2
+        if direction in ('left', 'l'):
+            pts = [(x + w - 2, center_y - 6), (x + 2, center_y), (x + w - 2, center_y + 6)]
+        elif direction in ('right', 'r'):
+            pts = [(x + 2, center_y - 6), (x + w - 2, center_y), (x + 2, center_y + 6)]
+        elif direction in ('up', 'u'):
+            pts = [(x + w // 2, center_y - 6), (x + 2, center_y + 6), (x + w - 2, center_y + 6)]
+        else:
+            pts = [(x + 2, center_y - 6), (x + w - 2, center_y - 6), (x + w // 2, center_y + 6)]
+        pygame.draw.polygon(screen, color, pts)
 
     def _draw_hp_overlay(self, screen):
         """Draw HP overlay showing current HP / max HP as visual hearts/bars."""
@@ -231,8 +349,6 @@ class Gameplay:
 
                 damage_amount = 2
                 knockback_dir = 1 if self.player.facing > 0 else -1
-                if self.debug_attacks:
-                    print(f"ATTACK hit: attack_rect={attack_rect}, enemy_rect={enemy.rect}, enemy_hitbox={enemy_hitbox}")
                 killed = enemy.take_damage(damage_amount, knockback_dir)
 
                 knockback_strength = 10
@@ -250,12 +366,35 @@ class Gameplay:
                     pass
 
                 try:
-                    self.app.audio.play_variant('attack')
-                    self.app.audio.play_variant('hit')
+                    self.app.audio.play_sound_effect(
+                        'attack',
+                        pitch=1.1,
+                        bitcrush=1,
+                        distortion=0.03,
+                        volume=0.9,
+                        layers=[
+                            {'pitch': 1.0, 'bitcrush': 0, 'gain': 0.6},
+                            {'pitch': 1.2, 'bitcrush': 2, 'gain': 0.4},
+                        ],
+                        async_process=True,
+                        cache=True,
+                    )
+
+                    self.app.audio.play_sound_effect(
+                        'hit',
+                        pitch=0.95,
+                        bitcrush=2,
+                        distortion=0.06,
+                        volume=1.0,
+                        layers=[
+                            {'pitch': 1.0, 'bitcrush': 0, 'gain': 0.5},
+                            {'pitch': 0.8, 'bitcrush': 3, 'gain': 0.5},
+                        ],
+                        async_process=True,
+                        cache=True,
+                    )
                 except Exception:
                     pass
-
-                self.player.flash_timer = now
                 try:
                     self.app.trigger_zoom(duration_ms=220, magnitude=1.06)
                 except Exception:
@@ -264,7 +403,20 @@ class Gameplay:
                 if killed:
 
                     try:
-                        self.app.audio.play_variant('die')
+
+                        self.app.audio.play_sound_effect(
+                            'die',
+                            pitch=0.9,
+                            bitcrush=3,
+                            distortion=0.12,
+                            volume=0.9,
+                            layers=[
+                                {'pitch': 1.0, 'bitcrush': 0, 'gain': 0.5},
+                                {'pitch': 0.85, 'bitcrush': 4, 'gain': 0.5},
+                            ],
+                            async_process=True,
+                            cache=True,
+                        )
                     except Exception:
                         pass
 
@@ -352,29 +504,6 @@ class Gameplay:
         text_rect = hp_text.get_rect(center=(enemy_screen_rect.centerx, bar_y - 12))
         screen.blit(hp_text, text_rect)
 
-    def _draw_debug_hitboxes(self, screen):
-        """Draw debug hitboxes for collision detection testing."""
-
-        player_screen_rect = self.camera.apply(self.player.rect)
-        pygame.draw.rect(screen, (255, 255, 0), player_screen_rect, 2)
-
-        player_hitbox = self.player.get_hitbox()
-        player_hitbox_screen = self.camera.apply(player_hitbox)
-        pygame.draw.rect(screen, (255, 0, 0), player_hitbox_screen, 2)
-
-        for enemy in self.enemies:
-
-            enemy_screen_rect = self.camera.apply(enemy.rect)
-            pygame.draw.rect(screen, (0, 255, 255), enemy_screen_rect, 2)
-
-            enemy_hitbox = enemy.get_hitbox()
-            enemy_hitbox_screen = self.camera.apply(enemy_hitbox)
-            pygame.draw.rect(screen, (255, 0, 255), enemy_hitbox_screen, 2)
-
-        debug_font = self._choose_game_font(20)
-        debug_text = debug_font.render('Amarelo=Player Sprite | Vermelho=Player Hitbox | Ciano=Enemy Sprite | Magenta=Enemy Hitbox', True, (255, 255, 0))
-        screen.blit(debug_text, (10, self.screen_height - 30))
-
     def _spawn_new_enemy(self):
         """Spawn a new enemy at a random location on the map."""
 
@@ -390,5 +519,4 @@ class Gameplay:
         self.enemies.append(new_enemy)
 
     def update_events(self):
-
         pass
