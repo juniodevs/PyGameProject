@@ -371,8 +371,6 @@ class Gameplay:
                     self.app.audio.play_variant('hit')
                 except Exception:
                     pass
-
-                self.player.flash_timer = now
                 try:
                     self.app.trigger_zoom(duration_ms=220, magnitude=1.06)
                 except Exception:
