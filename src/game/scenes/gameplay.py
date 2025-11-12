@@ -37,7 +37,6 @@ class Gameplay:
 
         self.font = self._choose_game_font(28)
 
-
         self.is_dead = False
         self.death_time = 0  
         self.death_countdown = 5  
