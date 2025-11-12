@@ -222,8 +222,58 @@ class Gameplay:
         for i, opt in enumerate(self.pause_options):
             color = (255, 220, 100) if i == self.pause_index else (255, 255, 255)
             text = self._choose_game_font(28).render(opt, True, color)
-            screen.blit(text, (w // 2 - text.get_width() // 2, y))
+            text_x = w // 2 - text.get_width() // 2
+            # draw a left arrow indicator for the selected option (triangle) to avoid depending on glyphs
+            if i == self.pause_index:
+                arrow_x = text_x - 40
+                center_y = y + text.get_height() // 2
+                pts = [(arrow_x + 28, center_y - 10), (arrow_x + 6, center_y), (arrow_x + 28, center_y + 10)]
+                pygame.draw.polygon(screen, (255, 220, 100), pts)
+
+            screen.blit(text, (text_x, y))
             y += 56
+
+        # Instruction hint below pause options with up/down icons
+        hint_prefix = 'Use '
+        hint_suffix = ' para navegar • Enter selecionar'
+        try:
+            hint_font = self._choose_game_font(20)
+            prefix_surf = hint_font.render(hint_prefix, True, (200, 200, 200))
+            suffix_surf = hint_font.render(hint_suffix, True, (200, 200, 200))
+            arrow_w = 18
+            gap = 6
+            total_w = prefix_surf.get_width() + arrow_w + gap + arrow_w + suffix_surf.get_width()
+            hint_x = w // 2 - total_w // 2
+            hint_y = y + 6
+            screen.blit(prefix_surf, (hint_x, hint_y))
+            hx = hint_x + prefix_surf.get_width()
+            # up arrow
+            self._draw_arrow_icon(screen, hx, hint_y, 'up', (240, 220, 160))
+            hx += arrow_w + gap
+            # down arrow
+            self._draw_arrow_icon(screen, hx, hint_y, 'down', (240, 220, 160))
+            hx += arrow_w + gap
+            screen.blit(suffix_surf, (hx, hint_y))
+        except Exception:
+            pass
+
+    def _draw_arrow_icon(self, screen, x, y, direction, color=(240, 220, 160)):
+        """Draw a small triangular arrow icon at (x,y). direction in ('left','right','up','down').
+
+        x,y are the top-left of an area approx 18x18 where the icon will be drawn.
+        """
+        w = 18
+        h = 18
+        center_y = y + h // 2
+        if direction in ('left', 'l'):
+            pts = [(x + w - 2, center_y - 6), (x + 2, center_y), (x + w - 2, center_y + 6)]
+        elif direction in ('right', 'r'):
+            pts = [(x + 2, center_y - 6), (x + w - 2, center_y), (x + 2, center_y + 6)]
+        elif direction in ('up', 'u'):
+            pts = [(x + w // 2, center_y - 6), (x + 2, center_y + 6), (x + w - 2, center_y + 6)]
+        else:
+            pts = [(x + 2, center_y - 6), (x + w - 2, center_y - 6), (x + w // 2, center_y + 6)]
+        pygame.draw.polygon(screen, color, pts)
 
     def _draw_hp_overlay(self, screen):
         """Draw HP overlay showing current HP / max HP as visual hearts/bars."""
