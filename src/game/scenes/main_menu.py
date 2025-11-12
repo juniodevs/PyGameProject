@@ -18,6 +18,12 @@ class MainMenu:
             "Space  - Saltar",
             "Esc    - Voltar / Sair",
         ]
+        # Play menu music with crossfade if available
+        try:
+            # fade_ms chosen small so transition feels snappy
+            self.app.audio.crossfade_music('menu', fade_ms=800)
+        except Exception:
+            pass
 
     def handle_event(self, event):
         if event.type == pygame.QUIT:
@@ -26,6 +32,10 @@ class MainMenu:
             if event.key == pygame.K_RETURN:
                 # Change to gameplay scene
                 # import dynamically to avoid circular imports at module load time
+                try:
+                    self.app.audio.play_sound('select')
+                except Exception:
+                    pass
                 import importlib
                 mod = importlib.import_module('game.scenes.gameplay')
                 Gameplay = getattr(mod, 'Gameplay')

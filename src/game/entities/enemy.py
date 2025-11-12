@@ -169,33 +169,18 @@ class Enemy:
             world_height: World height for bounds checking
             ground_y: Ground Y position
         """
-        # Apply gravity
         self.vel_y += self.gravity
 
-        # Apply knockback decay
         self.knockback_vel_x *= self.knockback_decay
         if abs(self.knockback_vel_x) < 0.1:
             self.knockback_vel_x = 0
 
-        # Move with knockback
         self.rect.x += int(self.vel_x + self.knockback_vel_x)
         self.rect.y += int(self.vel_y)
 
-        # Collision with player - prevent overlapping
-        # Get hitboxes
         my_hitbox = self.get_hitbox()
         player_hitbox = player.get_hitbox()
-        
-        # If colliding, push back
         if my_hitbox.colliderect(player_hitbox):
-            # Push away from player
-            if player.rect.centerx > self.rect.centerx:
-                # Player is to the right, push enemy left
-                self.rect.x -= 2
-            else:
-                # Player is to the left, push enemy right
-                self.rect.x += 2
-            # Stop movement
             self.vel_x = 0
 
         # Floor collision
@@ -288,13 +273,18 @@ class Enemy:
 
         # Decision tree based on distance
         
-        # 1. If TOO CLOSE (closer than retreat distance) -> BACK AWAY
+        # 1. If TOO CLOSE (closer than retreat_distance) -> try to maintain spacing.
+        # Only back away if hitboxes actually overlap; otherwise hold position near player.
         if dist < self.retreat_distance:
-            # Back away from player
-            if player.rect.centerx > self.rect.centerx:
-                self.vel_x = -self.speed  # Move left
+            if self.get_hitbox().colliderect(player.get_hitbox()):
+                # Back away from player if overlapping (prevents deep overlap)
+                if player.rect.centerx > self.rect.centerx:
+                    self.vel_x = -self.speed  # Move left
+                else:
+                    self.vel_x = self.speed   # Move right
             else:
-                self.vel_x = self.speed   # Move right
+                # Close but not overlapping -> stop near player to attack.
+                self.vel_x = 0
             self.pursuing = True
             return
 

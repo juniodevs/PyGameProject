@@ -1,4 +1,5 @@
 import pygame
+from .utils.audio import AudioManager
 
 
 class GameApp:
@@ -9,6 +10,27 @@ class GameApp:
         from .settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
 
         pygame.init()
+        # Initialize audio manager before creating scenes so scenes can play music immediately
+        try:
+            self.audio = AudioManager()
+        except Exception:
+            # If audio initialization fails for any reason, provide a fallback object with same API
+            class _NullAudio:
+                def play_sound(self, *a, **k):
+                    return None
+                def play_music(self, *a, **k):
+                    return False
+                def stop_music(self, *a, **k):
+                    return None
+                def set_master_volume(self, *a, **k):
+                    return None
+                def set_sfx_volume(self, *a, **k):
+                    return None
+                def set_music_volume(self, *a, **k):
+                    return None
+                def preload_folder(self, *a, **k):
+                    return 0
+            self.audio = _NullAudio()
         # actual display surface
         self.display = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Pygame Game")

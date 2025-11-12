@@ -39,6 +39,12 @@ class Gameplay:
         # Parallax background manager (loads layers and handles parallax drawing)
         self.background = ParallaxBackground(self.screen_width, self.screen_height, self.world_width, self.ground_y)
 
+        # Start gameplay music with crossfade (will quietly fail if no file present)
+        try:
+            self.app.audio.crossfade_music('gameplay', fade_ms=800)
+        except Exception:
+            pass
+
         # Choose a game-like font for HUD and messages
         self.font = self._choose_game_font(28)
 
@@ -49,6 +55,8 @@ class Gameplay:
         self.is_dead = False
         self.death_time = 0  # Timestamp when player died
         self.death_countdown = 5  # Seconds before returning to menu
+        self.attack_cooldown_ms = 500
+        self.last_attack_time = 0
 
     def _choose_game_font(self, size, bold=False):
         """Pick a game-like font if available, otherwise fall back to system default.
@@ -83,7 +91,14 @@ class Gameplay:
                 self.app.go_to_menu()
             # Attack with Ctrl -> call player's attack animation
             if event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
-                self.player.attack()
+                now = pygame.time.get_ticks()
+                if now - self.last_attack_time >= self.attack_cooldown_ms:
+                    self.last_attack_time = now
+                    try:
+                        self.app.audio.play_variant('attack')
+                    except Exception:
+                        pass
+                    self.player.attack()
             # Test damage with 'H' key (for testing HP system)
             if event.key == pygame.K_h:
                 self.player.take_damage(1)
@@ -289,6 +304,13 @@ class Gameplay:
                 except Exception:
                     pass
 
+                # Play attack and hit sounds (if provided in assets/sounds)
+                try:
+                    self.app.audio.play_variant('attack')
+                    self.app.audio.play_variant('hit')
+                except Exception:
+                    pass
+
                 # Also briefly flash the player to emphasize the hit-deal action
                 self.player.flash_timer = now
                 try:
@@ -297,8 +319,11 @@ class Gameplay:
                     pass
 
                 if killed:
-                    # Enemy died
-                    pass
+                    # Enemy died - play death SFX
+                    try:
+                        self.app.audio.play_variant('die')
+                    except Exception:
+                        pass
 
     def _check_enemy_attack_collision(self):
         """Check if any enemy is attacking and hitting the player."""
@@ -343,6 +368,19 @@ class Gameplay:
                     self.app.trigger_zoom(duration_ms=220, magnitude=1.08)
                 except Exception:
                     pass
+                # Play player hurt sound
+                try:
+                    self.app.audio.play_variant('hit')
+                except Exception:
+                    pass
+
+                # If player died, play death music/sfx once
+                if self.player.current_hp <= 0:
+                    try:
+                        self.app.audio.play_variant('die')
+                        self.app.audio.crossfade_music('game_over', fade_ms=1000)
+                    except Exception:
+                        pass
 
     def _draw_enemy_hp(self, screen, enemy, enemy_screen_rect):
         """Draw enemy HP bar above the enemy sprite."""

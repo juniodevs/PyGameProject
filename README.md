@@ -54,6 +54,17 @@ To start the game, run the following command:
 python src/main.py
 ```
 
+## Audio assets (how to add)
+The game includes an AudioManager that looks for audio files under `src/assets`.
+
+- Sound effects: place short SFX files in `src/assets/sounds/` (recommended formats: .wav, .ogg, .mp3).
+   Example names: `attack.wav`, `hit.wav`, `player_hurt.wav`, `enemy_die.wav`, `select.wav`.
+- Music: place background tracks in `src/assets/music/` (recommended: .ogg, .mp3).
+   Example names: `menu.ogg`, `gameplay.ogg`, `game_over.ogg`.
+
+The code will try to load by name (e.g. `self.app.audio.play_sound('attack')`) and will try common extensions automatically.
+You can also preload all sounds by calling `app.audio.preload_folder()` from your code if desired.
+
 ## Game Features
 - Main Menu: Navigate through the main menu to start the game.
 - Gameplay: Experience basic gameplay mechanics.
