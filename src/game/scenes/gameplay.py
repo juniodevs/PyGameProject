@@ -3,6 +3,7 @@ import random
 from ..settings import WHITE, ATTACK_RANGE, ATTACK_HEIGHT_FACTOR
 from ..entities.player import Player
 from ..entities.enemy import Enemy
+from ..entities.effects import Hitspark
 from ..entities.health import Health
 from ..camera import Camera
 from ..background import ParallaxBackground
@@ -26,6 +27,9 @@ class Gameplay:
         self.enemies.append(test_enemy)
 
         self.kill_count = 0
+
+        # active transient visual effects (Hitspark instances)
+        self.effects = []
 
         # Health pickup state: only one exists at a time. When collected, schedule respawn
         # next_health_spawn_time is in milliseconds since pygame start (0 = not scheduled)
@@ -294,6 +298,18 @@ class Gameplay:
             # Check for player collecting the health pickup
             self._check_health_collision()
 
+            # update transient effects
+            try:
+                for eff in self.effects:
+                    try:
+                        eff.update()
+                    except Exception:
+                        pass
+                # remove finished effects
+                self.effects = [e for e in self.effects if not getattr(e, 'finished', False)]
+            except Exception:
+                pass
+
             if self.player.current_hp <= 0 and not self.is_dead:
                 self.is_dead = True
                 self.death_time = now
@@ -345,6 +361,16 @@ class Gameplay:
 
         if player_screen_rect.right > 0 and player_screen_rect.left < self.screen_width:
             self.player.draw_at(screen, player_screen_rect.topleft)
+
+        # draw transient effects (on top of entities)
+        try:
+            for eff in self.effects:
+                try:
+                    eff.draw(screen, self.camera)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
         instr = self.font.render('Esc - Voltar ao Menu', True, WHITE)
         screen.blit(instr, (10, 10))
@@ -572,6 +598,15 @@ class Gameplay:
                     )
                 except Exception:
                     pass
+                # spawn hitspark on enemy at the collision point
+                try:
+                    try:
+                        hit_x, hit_y = enemy.get_hitbox().center
+                    except Exception:
+                        hit_x, hit_y = enemy.rect.centerx, enemy.rect.centery
+                    self.effects.append(Hitspark(hit_x, hit_y))
+                except Exception:
+                    pass
                 try:
                     self.app.trigger_zoom(duration_ms=220, magnitude=1.06)
                 except Exception:
@@ -635,6 +670,16 @@ class Gameplay:
                     pass
                 try:
                     self.app.trigger_zoom(duration_ms=220, magnitude=1.08)
+                except Exception:
+                    pass
+
+                # spawn hitspark on player at the collision point
+                try:
+                    try:
+                        px, py = player_hitbox.center
+                    except Exception:
+                        px, py = self.player.rect.centerx, self.player.rect.centery
+                    self.effects.append(Hitspark(px, py))
                 except Exception:
                     pass
 
