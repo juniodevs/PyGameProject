@@ -44,6 +44,11 @@ class Gameplay:
         self.is_dead = False
         self.death_time = 0  
         self.death_countdown = 5  
+        # death menu (appear after death animation / short delay)
+        self.death_menu_active = False
+        self.death_menu_options = ['REINICIAR FASE', 'VOLTAR AO MENU']
+        self.death_menu_index = 0
+        self.death_menu_delay_ms = 700
 
         self.attack_cooldown_ms = 1000
         self.last_attack_time = 0
@@ -91,6 +96,111 @@ class Gameplay:
                 except Exception:
                     pass
                 self.config_overlay = None
+        # If player is dead and death menu is active, intercept input for choice selection
+        if self.is_dead and self.death_menu_active:
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_UP, pygame.K_w):
+                    self.death_menu_index = (self.death_menu_index - 1) % len(self.death_menu_options)
+                    return
+                elif event.key in (pygame.K_DOWN, pygame.K_s):
+                    self.death_menu_index = (self.death_menu_index + 1) % len(self.death_menu_options)
+                    return
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    choice = self.death_menu_options[self.death_menu_index]
+                    if choice == 'REINICIAR FASE':
+                        # restart by reloading this scene
+                        try:
+                            # restore audio settings from config before restarting
+                            try:
+                                from ..utils.config import load_config
+                                cfg = load_config()
+                                try:
+                                    self.app.audio.set_music_volume(cfg.get('music_volume', 0.6))
+                                    self.app.audio.set_sfx_volume(cfg.get('sfx_volume', 1.0))
+                                    self.app.audio.set_master_volume(cfg.get('master_volume', 1.0))
+                                except Exception:
+                                    pass
+                            except Exception:
+                                pass
+                            self.app.change_scene(self.__class__)
+                        except Exception:
+                            # fallback: go to menu if restart fails
+                            try:
+                                from ..utils.config import load_config
+                                cfg = load_config()
+                                try:
+                                    self.app.audio.set_music_volume(cfg.get('music_volume', 0.6))
+                                    self.app.audio.set_sfx_volume(cfg.get('sfx_volume', 1.0))
+                                    self.app.audio.set_master_volume(cfg.get('master_volume', 1.0))
+                                except Exception:
+                                    pass
+                            except Exception:
+                                pass
+                            self.app.go_to_menu()
+                    else:
+                        # restore audio before returning to menu
+                        try:
+                            from ..utils.config import load_config
+                            cfg = load_config()
+                            try:
+                                self.app.audio.set_music_volume(cfg.get('music_volume', 0.6))
+                                self.app.audio.set_sfx_volume(cfg.get('sfx_volume', 1.0))
+                                self.app.audio.set_master_volume(cfg.get('master_volume', 1.0))
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                        self.app.go_to_menu()
+                    return
+                elif event.key == pygame.K_ESCAPE:
+                    # treat as go to menu
+                    self.app.go_to_menu()
+                    return
+            # also allow mouse click on options
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = event.pos
+                try:
+                    w, h = self.screen.get_size()
+                    base_y = h // 2 + 20
+                    for i, opt in enumerate(self.death_menu_options):
+                        txt = self._choose_game_font(32).render(opt, True, (255, 255, 255))
+                        txt_x = w // 2 - txt.get_width() // 2
+                        txt_y = base_y + i * 56
+                        rect = pygame.Rect(txt_x - 12, txt_y - 6, txt.get_width() + 24, txt.get_height() + 12)
+                        if rect.collidepoint(mx, my):
+                            if opt == 'REINICIAR FASE':
+                                try:
+                                    from ..utils.config import load_config
+                                    try:
+                                        cfg = load_config()
+                                        try:
+                                            self.app.audio.set_music_volume(cfg.get('music_volume', 0.6))
+                                            self.app.audio.set_sfx_volume(cfg.get('sfx_volume', 1.0))
+                                            self.app.audio.set_master_volume(cfg.get('master_volume', 1.0))
+                                        except Exception:
+                                            pass
+                                    except Exception:
+                                        pass
+                                    self.app.change_scene(self.__class__)
+                                except Exception:
+                                    self.app.go_to_menu()
+                            else:
+                                try:
+                                    from ..utils.config import load_config
+                                    cfg = load_config()
+                                    try:
+                                        self.app.audio.set_music_volume(cfg.get('music_volume', 0.6))
+                                        self.app.audio.set_sfx_volume(cfg.get('sfx_volume', 1.0))
+                                        self.app.audio.set_master_volume(cfg.get('master_volume', 1.0))
+                                    except Exception:
+                                        pass
+                                except Exception:
+                                    pass
+                                self.app.go_to_menu()
+                            return
+                except Exception:
+                    pass
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
 
@@ -133,44 +243,54 @@ class Gameplay:
 
     def update(self):
 
+        # don't update game logic while paused or config overlay
         if self.paused or self.config_overlay:
-
             return
-
-        keys = pygame.key.get_pressed()
-        self.player.handle_input(keys)
-        self.player.update(self.world_width, self.world_height, self.ground_y)
-
-        for enemy in self.enemies:
-            enemy.update(self.player, self.world_width, self.world_height, self.ground_y)
-
-        self._check_player_attack_collision()
-
-        self._check_enemy_attack_collision()
 
         now = pygame.time.get_ticks()
 
-        for enemy in self.enemies:
-            if enemy.current_hp <= 0 and now - enemy.death_time > 1000:
-                self.kill_count += 1
-                self._spawn_new_enemy()  
+        # If player is not dead, run normal update loop
+        if not self.is_dead:
+            keys = pygame.key.get_pressed()
+            self.player.handle_input(keys)
+            self.player.update(self.world_width, self.world_height, self.ground_y)
 
-        self.enemies = [e for e in self.enemies if not (e.current_hp <= 0 and now - e.death_time > 1000)]
+            for enemy in self.enemies:
+                enemy.update(self.player, self.world_width, self.world_height, self.ground_y)
 
-        if self.player.current_hp <= 0 and not self.is_dead:
-            self.is_dead = True
-            self.death_time = pygame.time.get_ticks()
+            self._check_player_attack_collision()
 
-        if self.is_dead:
-            now = pygame.time.get_ticks()
+            self._check_enemy_attack_collision()
+
+            for enemy in self.enemies:
+                if enemy.current_hp <= 0 and now - enemy.death_time > 1000:
+                    self.kill_count += 1
+                    self._spawn_new_enemy()  
+
+            self.enemies = [e for e in self.enemies if not (e.current_hp <= 0 and now - e.death_time > 1000)]
+
+            if self.player.current_hp <= 0 and not self.is_dead:
+                self.is_dead = True
+                self.death_time = now
+                # mute sfx immediately because player is dead (avoid attack/hit sounds after death)
+                try:
+                    # try to set sfx volume to 0; config will be restored when restarting/going to menu
+                    self.app.audio.set_sfx_volume(0)
+                except Exception:
+                    pass
+
+        else:
+            # Player is dead — wait a small delay for death animation, then show death menu
             elapsed_ms = now - self.death_time
-            elapsed_s = elapsed_ms / 1000.0
+            if not self.death_menu_active and elapsed_ms >= self.death_menu_delay_ms:
+                self.death_menu_active = True
+                self.death_menu_index = 0
 
-            if elapsed_s >= self.death_countdown:
-
-                self.app.go_to_menu()
-
-        self.camera.update(self.player.rect)
+        # keep camera centered on player even after death
+        try:
+            self.camera.update(self.player.rect)
+        except Exception:
+            pass
 
     def _close_config(self):
         self.config_overlay = None
@@ -201,7 +321,10 @@ class Gameplay:
         self._draw_hp_overlay(screen)
 
         if self.is_dead:
-            self._draw_death_countdown(screen)
+            if getattr(self, 'death_menu_active', False):
+                self._draw_death_menu(screen)
+            else:
+                self._draw_death_countdown(screen)
 
         if self.paused:
             self._render_pause(screen)
@@ -306,25 +429,45 @@ class Gameplay:
 
     def _draw_death_countdown(self, screen):
         """Draw death screen with countdown to return to menu."""
-
-        overlay = pygame.Surface((self.screen_width, self.screen_height))
-        overlay.set_alpha(128)
-        overlay.fill((0, 0, 0))
+        # Minimal overlay when dead before the death menu appears (no countdown text)
+        overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
-
-        now = pygame.time.get_ticks()
-        elapsed_ms = now - self.death_time
-        remaining_s = max(0, self.death_countdown - (elapsed_ms / 1000.0))
 
         large_font = self._choose_game_font(72)
         death_text = large_font.render('VOCÊ MORREU', True, (255, 0, 0))
-        text_rect = death_text.get_rect(center=(self.screen_width // 2, self.screen_height // 2 - 80))
+        text_rect = death_text.get_rect(center=(self.screen_width // 2, self.screen_height // 2 - 20))
         screen.blit(death_text, text_rect)
 
-        countdown_font = self._choose_game_font(48)
-        countdown_text = countdown_font.render(f'Retornando em: {int(remaining_s) + 1}s', True, WHITE)
-        countdown_rect = countdown_text.get_rect(center=(self.screen_width // 2, self.screen_height // 2 + 50))
-        screen.blit(countdown_text, countdown_rect)
+    def _draw_death_menu(self, screen):
+        """Draw a simple menu allowing the player to Restart or go back to Menu."""
+        w, h = screen.get_size()
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        screen.blit(overlay, (0, 0))
+
+        large_font = self._choose_game_font(72)
+        title = large_font.render('VOCÊ MORREU', True, (255, 0, 0))
+        screen.blit(title, (w // 2 - title.get_width() // 2, h // 2 - 140))
+
+        base_y = h // 2 - 20
+        for i, opt in enumerate(self.death_menu_options):
+            is_sel = (i == self.death_menu_index)
+            color = (255, 220, 100) if is_sel else (255, 255, 255)
+            txt = self._choose_game_font(32).render(opt, True, color)
+            txt_x = w // 2 - txt.get_width() // 2
+            txt_y = base_y + i * 56
+
+            # button background for clarity
+            rect = pygame.Rect(txt_x - 12, txt_y - 6, txt.get_width() + 24, txt.get_height() + 12)
+            pygame.draw.rect(screen, (40, 40, 40), rect, border_radius=6)
+            if is_sel:
+                pygame.draw.rect(screen, (255, 220, 100), rect, 3, border_radius=6)
+
+            screen.blit(txt, (txt_x, txt_y))
+
+        hint = self._choose_game_font(18).render('Use ↑/↓ para escolher • Enter para confirmar', True, (200, 200, 200))
+        screen.blit(hint, (w // 2 - hint.get_width() // 2, base_y + len(self.death_menu_options) * 56 + 8))
 
     def _check_player_attack_collision(self):
         """Check if player's attack hit any enemies with improved hitbox detection."""
