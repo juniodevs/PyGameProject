@@ -31,6 +31,12 @@ class AudioManager:
         self.sounds = {}  # name -> pygame.mixer.Sound
         self.channels = {}  # optional named channels
         self.variant_sounds = {}
+        self._menu_ramp_thread = None
+        self._battle_thread = None
+        self._battle_stop_event = None
+        self._battle_channels = []
+        self._battle_base_target = None
+        self._battle_channel_fraction = {}
 
         # Reserve channels
         try:
@@ -162,6 +168,126 @@ class AudioManager:
         t.start()
         return True
 
+    def play_menu_music(self, filename='menumusic', target_volume=0.1, ramp_ms=5000, fade_ms=800):
+        path = None
+        if os.path.isabs(filename) and os.path.isfile(filename):
+            path = filename
+        else:
+            path = self._find_file(self.music_path, filename, self.DEFAULT_MUSIC_EXT)
+        if not path:
+            return False
+        try:
+            pygame.mixer.music.load(path)
+            pygame.mixer.music.set_volume(0.0)
+            pygame.mixer.music.play(loops=-1, fade_ms=fade_ms)
+        except Exception:
+            return False
+        def _ramp(target, ms):
+            steps = max(1, int(ms/100))
+            for i in range(1, steps+1):
+                if not pygame.mixer.get_init():
+                    break
+                vol = (i/steps) * float(target)
+                try:
+                    pygame.mixer.music.set_volume(vol * self.music_volume * self.master_volume)
+                except Exception:
+                    pass
+                time.sleep(ms/steps/1000.0)
+        if self._menu_ramp_thread and self._menu_ramp_thread.is_alive():
+            pass
+        t = threading.Thread(target=_ramp, args=(target_volume, ramp_ms), daemon=True)
+        self._menu_ramp_thread = t
+        t.start()
+        return True
+
+    def _get_music_sound(self, name):
+        if os.path.isabs(name) and os.path.isfile(name):
+            return name
+        return self._find_file(self.music_path, name, self.DEFAULT_MUSIC_EXT)
+
+    def start_battle_music(self, names=('battlemusic1','battlemusic2'), channel_count=2, target_volume=0.1, crossfade_s=3.0):
+        files = []
+        for n in names:
+            p = self._get_music_sound(n)
+            if p:
+                files.append(p)
+        if not files:
+            return False
+        try:
+            pygame.mixer.music.fadeout(800)
+        except Exception:
+            pass
+        total_channels = pygame.mixer.get_num_channels()
+        ch_indices = list(range(max(0, total_channels-2), total_channels))
+        self._battle_channels = [pygame.mixer.Channel(i) for i in ch_indices]
+        stop_event = threading.Event()
+        self._battle_stop_event = stop_event
+        self._battle_base_target = float(target_volume)
+        self._battle_channel_fraction = {}
+        def _runner(file_list, stop_evt):
+            order = file_list[:]
+            random.shuffle(order)
+            idx = 0
+            prev_ch = None
+            while not stop_evt.is_set():
+                path = order[idx % len(order)]
+                try:
+                    snd = pygame.mixer.Sound(path)
+                except Exception:
+                    return
+                ch = self._battle_channels[idx % len(self._battle_channels)]
+                ch.set_volume(0.0)
+                self._battle_channel_fraction[ch] = 0.0
+                ch.play(snd)
+                length = snd.get_length()
+                start_time = time.time()
+                fade_start = max(0.0, length - float(crossfade_s))
+                ch.set_volume(0.0)
+                ramp_steps = max(1, int(float(crossfade_s) / 0.1))
+                for step in range(ramp_steps):
+                    if stop_evt.is_set():
+                        break
+                    frac = ((step+1)/ramp_steps)
+                    self._battle_channel_fraction[ch] = frac
+                    vol = frac * float(target_volume) * self.music_volume * self.master_volume
+                    try:
+                        ch.set_volume(vol)
+                    except Exception:
+                        pass
+                    time.sleep(float(crossfade_s)/ramp_steps)
+                wait = max(0.0, length - float(crossfade_s))
+                elapsed = time.time() - start_time
+                remaining = wait - elapsed
+                while remaining > 0 and not stop_evt.is_set():
+                    time.sleep(min(0.5, remaining))
+                    elapsed = time.time() - start_time
+                    remaining = wait - elapsed
+                if prev_ch and prev_ch != ch:
+                    try:
+                        prev_ch.fadeout(int(float(crossfade_s)*1000))
+                    except Exception:
+                        pass
+                prev_ch = ch
+                idx += 1
+            for c in self._battle_channels:
+                try:
+                    c.fadeout(500)
+                except Exception:
+                    pass
+        t = threading.Thread(target=_runner, args=(files, stop_event), daemon=True)
+        self._battle_thread = t
+        t.start()
+        return True
+
+    def stop_battle_music(self):
+        if self._battle_stop_event:
+            try:
+                self._battle_stop_event.set()
+            except Exception:
+                pass
+        self._battle_stop_event = None
+        self._battle_thread = None
+
     def set_master_volume(self, volume):
         self.master_volume = max(0.0, min(1.0, float(volume)))
         pygame.mixer.music.set_volume(self.music_volume * self.master_volume)
@@ -170,6 +296,13 @@ class AudioManager:
                 snd.set_volume(self.sfx_volume * self.master_volume)
             except Exception:
                 pass
+        if self._battle_base_target and self._battle_channels:
+            for ch in self._battle_channels:
+                try:
+                    frac = self._battle_channel_fraction.get(ch, 1.0)
+                    ch.set_volume(frac * self._battle_base_target * self.music_volume * self.master_volume)
+                except Exception:
+                    pass
 
     def set_sfx_volume(self, volume):
         self.sfx_volume = max(0.0, min(1.0, float(volume)))
@@ -185,6 +318,13 @@ class AudioManager:
             pygame.mixer.music.set_volume(self.music_volume * self.master_volume)
         except Exception:
             pass
+        if self._battle_base_target and self._battle_channels:
+            for ch in self._battle_channels:
+                try:
+                    frac = self._battle_channel_fraction.get(ch, 1.0)
+                    ch.set_volume(frac * self._battle_base_target * self.music_volume * self.master_volume)
+                except Exception:
+                    pass
 
     def mute(self):
         self.set_master_volume(0.0)
@@ -209,6 +349,7 @@ class AudioManager:
     def _find_variant_dir(self, category):
         candidates = [
             os.path.join(self.sfx_path, category),
+            os.path.join(self.assets_path, 'aounds', category),
             os.path.join(self.assets_path, 'sounds', category),
         ]
         for c in candidates:

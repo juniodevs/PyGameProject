@@ -45,7 +45,11 @@ class MainMenu:
         self._next_jump_time = pygame.time.get_ticks() + 2000
 
         try:
-            self.app.audio.crossfade_music('menu', fade_ms=800)
+            self.app.audio.stop_battle_music()
+        except Exception:
+            pass
+        try:
+            self.app.audio.play_menu_music('menumusic', target_volume=0.1, ramp_ms=5000, fade_ms=800)
         except Exception:
             pass
 

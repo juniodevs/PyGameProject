@@ -31,7 +31,11 @@ class Gameplay:
         self.background = ParallaxBackground(self.screen_width, self.screen_height, self.world_width, self.ground_y)
 
         try:
-            self.app.audio.crossfade_music('gameplay', fade_ms=800)
+            self.app.audio.stop_music(fade_ms=600)
+        except Exception:
+            pass
+        try:
+            self.app.audio.start_battle_music(('battlemusic1','battlemusic2'), target_volume=0.8, crossfade_s=3.0)
         except Exception:
             pass
 
