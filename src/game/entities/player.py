@@ -3,7 +3,6 @@ import pygame
 import random
 from ..settings import HITBOX_WIDTH, HITBOX_HEIGHT
 
-
 class Player:
     """Player with sprite-based animations.
 
@@ -16,32 +15,28 @@ class Player:
         self.height = 160
         self.rect = pygame.Rect(x, y, self.width, self.height)
 
-        # Hitbox (same as enemy for consistency). Use global constants so it's easy
-        # to change the size project-wide.
         self.hitbox_width = HITBOX_WIDTH
         self.hitbox_height = HITBOX_HEIGHT
         self.hitbox_offset_x = (self.width - self.hitbox_width) // 2
-        self.hitbox_offset_y = self.height - self.hitbox_height
 
-        # Movement
+        self.hitbox_offset_y = (self.height - self.hitbox_height) // 2
+
         self.speed = 5
         self.vel_x = 0
         self.vel_y = 0
         self.jump_power = -12
         self.gravity = 0.6
         self.on_ground = False
-        self.facing = 1  # 1 = right, -1 = left
+        self.facing = 1  
 
-        # Knockback
         self.knockback_vel_x = 0
         self.knockback_decay = 0.85
 
-        # Animation state
-        self.animations = {}  # name -> list of Surfaces
+        self.animations = {}  
         self.state = 'idle'
         self.anim_index = 0
         self.last_anim_time = pygame.time.get_ticks()
-        # milliseconds per frame (can be tuned per animation)
+
         self.frame_durations = {
             'idle': 100,
             'run': 80,
@@ -56,22 +51,18 @@ class Player:
             'death': 100,
         }
 
-        # Attack toggle to alternate between attack1 and attack2
         self._next_attack_is_two = False
-        # Lock movement while certain animations play
+
         self.locked = False
 
-        # HP system (5 hits max)
         self.max_hp = 5
         self.current_hp = 5
-        self.hit_cooldown = 0  # Cooldown between hits in milliseconds
-        self.hit_cooldown_duration = 1000  # 1 second invulnerability after hit
+        self.hit_cooldown = 0  
+        self.hit_cooldown_duration = 1000  
 
-        # Flash effect when receiving damage
         self.flash_timer = 0
-        self.flash_duration = 180  # milliseconds to flash white when hit
+        self.flash_duration = 180  
 
-        # load sprites
         self._load_sprites()
 
     def _load_sprites(self):
@@ -82,7 +73,6 @@ class Player:
         base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
         assets_dir = os.path.join(base, 'assets', 'images', 'player')
 
-        # mapping animation name -> (filename without leading underscore, frame_count)
         mapping = {
             'idle': ('Idle', 10),
             'run': ('Run', 10),
@@ -100,22 +90,19 @@ class Player:
             fname = f'_{name}.png'
             path = os.path.join(assets_dir, fname)
             if not os.path.exists(path):
-                # fallback: create a simple colored surface so game won't crash
+
                 surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
                 surf.fill((255, 0, 255))
                 self.animations[state] = [surf]
                 continue
 
-            # Some environments (headless tests) may not have a video mode set,
-            # which makes convert_alpha() raise. Try to use convert_alpha when
-            # available, otherwise fall back to loading without conversion.
             try:
                 if pygame.display.get_init():
                     sheet = pygame.image.load(path).convert_alpha()
                 else:
                     sheet = pygame.image.load(path)
             except Exception:
-                # If loading fails for any reason, fall back to a placeholder
+
                 sheet = None
 
             if sheet is None:
@@ -125,21 +112,20 @@ class Player:
                 continue
             sheet_w, sheet_h = sheet.get_size()
 
-            # If frames fits horizontally
             frame_w = max(1, sheet_w // frames)
             frames_list = []
             for i in range(frames):
                 rect = pygame.Rect(i * frame_w, 0, frame_w, sheet_h)
                 frame = pygame.Surface(rect.size, pygame.SRCALPHA)
                 frame.blit(sheet, (0, 0), rect)
-                # scale to target size
+
                 frame = pygame.transform.smoothscale(frame, (self.width, self.height))
                 frames_list.append(frame)
 
             self.animations[state] = frames_list
 
     def handle_input(self, keys):
-        # If locked (e.g., during attack animations) or dead, don't accept movement input
+
         if self.locked or self.state == 'death':
             self.vel_x = 0
             return
@@ -163,38 +149,37 @@ class Player:
         self.state = 'attack2' if self._next_attack_is_two else 'attack1'
         self.anim_index = 0
         self.last_anim_time = pygame.time.get_ticks()
-        # lock movement briefly while attacking
+
         self.locked = True
 
     def take_damage(self, amount=1):
         """Player receives damage. Activates hit animation and cooldown.
-        
+
         Args:
             amount: Amount of damage to take (default 1)
-            
+
         Returns:
             True if player dies (HP <= 0), False otherwise
         """
-        # Check if still in cooldown (invulnerable)
+
         now = pygame.time.get_ticks()
         if self.hit_cooldown > 0 and now - self.hit_cooldown < self.hit_cooldown_duration:
             return False
-        
+
         self.current_hp -= amount
         self.hit_cooldown = now
-        # trigger flash effect
+
         self.flash_timer = now
-        
-        # Play hit animation
+
         if self.current_hp > 0:
             self._set_state('hit')
             self.locked = True
         else:
-            # Player dies
+
             self._set_state('death')
             self.current_hp = 0
             return True
-        
+
         return False
 
     def _set_state(self, new_state):
@@ -205,50 +190,42 @@ class Player:
         self.last_anim_time = pygame.time.get_ticks()
 
     def update(self, screen_width, screen_height, ground_y):
-        # Apply gravity
+
         self.vel_y += self.gravity
 
-        # Apply knockback decay
         self.knockback_vel_x *= self.knockback_decay
         if abs(self.knockback_vel_x) < 0.1:
             self.knockback_vel_x = 0
 
-        # Move with knockback
         self.rect.x += int(self.vel_x + self.knockback_vel_x)
         self.rect.y += int(self.vel_y)
 
-        # Ensure horizontal/world bounds based on hitbox (not sprite image)
-        # If the hitbox is going out of bounds, shift the full sprite rect so the hitbox stays inside.
         hb = self.get_hitbox()
         if hb.left < 0:
-            # shift right by the overlap amount
+
             overlap = 0 - hb.left
             self.rect.x += overlap
         if hb.right > screen_width:
             overlap = hb.right - screen_width
             self.rect.x -= overlap
 
-        # Floor collision
         if self.rect.bottom >= ground_y:
             self.rect.bottom = ground_y
             self.vel_y = 0
-            # If was falling or jumping, land
+
             self.on_ground = True
         else:
             self.on_ground = False
 
-        # Decide animation state based on velocities and flags
-        # Death/hit take precedence (not implemented death trigger here)
         if self.state == 'death':
-            # play death until finished (no transitions)
+
             self._update_animation(loop=False)
             return
 
-        # If in hit state, advance animation and unlock when finished
         if self.state == 'hit':
             finished = self._update_animation(loop=False)
             if finished:
-                # return to run or idle depending on vel_x
+
                 self.locked = False
                 if abs(self.vel_x) > 0:
                     self._set_state('run')
@@ -256,11 +233,10 @@ class Player:
                     self._set_state('idle')
             return
 
-        # If attacking, advance attack animation and unlock when finished
         if self.state.startswith('attack'):
             finished = self._update_animation(loop=False)
             if finished:
-                # return to run or idle depending on vel_x
+
                 self.locked = False
                 if abs(self.vel_x) > 0:
                     self._set_state('run')
@@ -268,25 +244,23 @@ class Player:
                     self._set_state('idle')
             return
 
-        # In air -> jump or fall
         if not self.on_ground:
             if self.vel_y < 0:
-                # going up -> jump
-                # If we just switched from falling, play jump_trans first
+
                 if self.state == 'fall' and 'jump_trans' in self.animations:
                     self._set_state('jump_trans')
                 else:
                     self._set_state('jump')
             else:
-                # going down -> fall. If we were in jump, insert transition
+
                 if self.state == 'jump' and 'jump_trans' in self.animations:
                     self._set_state('jump_trans')
                 else:
                     self._set_state('fall')
         else:
-            # On ground: run or idle
+
             if abs(self.vel_x) > 0:
-                # turning quickly? use turn animation when velocity reverses
+
                 if (self.vel_x > 0 and self.facing < 0) or (self.vel_x < 0 and self.facing > 0):
                     self._set_state('turn')
                 else:
@@ -294,7 +268,6 @@ class Player:
             else:
                 self._set_state('idle')
 
-        # advance animation normally
         self._update_animation(loop=True)
 
     def _update_animation(self, loop=True):
@@ -316,7 +289,7 @@ class Player:
                 if loop:
                     self.anim_index = 0
                 else:
-                    # clamp to last frame and report finished
+
                     self.anim_index = len(frames) - 1
                     return True
         return False
@@ -324,59 +297,56 @@ class Player:
     def draw(self, surface):
         frames = self.animations.get(self.state, None)
         if not frames:
-            # fallback visual
+
             pygame.draw.rect(surface, (0, 200, 0), self.rect)
             return
 
         frame = frames[self.anim_index % len(frames)]
-        # flip if facing left
+
         if self.facing < 0:
             frame = pygame.transform.flip(frame, True, False)
 
         surface.blit(frame, self.rect.topleft)
 
-        # If flashing (just got hit), draw a white-tinted version of the sprite
         now = pygame.time.get_ticks()
         if getattr(self, 'flash_timer', 0) and now - self.flash_timer < self.flash_duration:
-            # Create a white-tinted copy of the frame that preserves the sprite alpha
+
             try:
                 white_frame = frame.copy()
-                # Add white to RGB channels while preserving alpha (quick tint)
-                # Use BLEND_RGB_ADD so we don't change per-pixel alpha (prevents tinting transparent background)
+
                 white_frame.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
                 surface.blit(white_frame, self.rect.topleft)
             except Exception:
-                # Fallback to rectangular overlay if something goes wrong
+
                 overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
                 overlay.fill((255, 255, 255, 180))
                 surface.blit(overlay, self.rect.topleft)
 
     def draw_at(self, surface, pos):
         """Draw player sprite at a specific screen position (used by camera system).
-        
+
         Args:
             surface: pygame surface to draw on
             pos: tuple (x, y) position on screen in pixels
         """
         frames = self.animations.get(self.state, None)
         if not frames:
-            # fallback visual
+
             pygame.draw.rect(surface, (0, 200, 0), (*pos, self.width, self.height))
             return
 
         frame = frames[self.anim_index % len(frames)]
-        # flip if facing left
+
         if self.facing < 0:
             frame = pygame.transform.flip(frame, True, False)
 
         surface.blit(frame, pos)
 
-        # Flash overlay when damaged (only over sprite silhouette)
         now = pygame.time.get_ticks()
         if getattr(self, 'flash_timer', 0) and now - self.flash_timer < self.flash_duration:
             try:
                 white_frame = frame.copy()
-                # Use RGB add so alpha stays untouched
+
                 white_frame.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
                 surface.blit(white_frame, pos)
             except Exception:
@@ -386,15 +356,14 @@ class Player:
 
     def get_rect(self):
         return self.rect
-    
+
     def get_hitbox(self):
         """Get the actual hitbox for body collision detection.
-        
+
         Returns a rect centered on the player body for realistic collision.
         Same dimensions as enemy hitbox for consistency.
         """
-        # Compute hitbox top-left relative to sprite rect.topleft using explicit offsets.
-        # This is more robust than using centerx/bottom directly and makes intent clear.
+
         hitbox_x = int(self.rect.x + self.hitbox_offset_x)
         hitbox_y = int(self.rect.y + self.hitbox_offset_y)
 
