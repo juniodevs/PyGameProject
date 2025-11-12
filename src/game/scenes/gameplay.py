@@ -45,6 +45,11 @@ class Gameplay:
         self.attack_cooldown_ms = 500
         self.last_attack_time = 0
 
+        self.paused = False
+        self.pause_index = 0
+        self.pause_options = ['CONTINUAR', 'CONFIGURAÇÃO', 'VOLTAR PARA O MENU']
+        self.config_overlay = None
+
     def _choose_game_font(self, size, bold=False):
         """Pick a game-like font if available, otherwise fall back to system default.
 
@@ -72,10 +77,46 @@ class Gameplay:
     def handle_event(self, event):
         if event.type == pygame.QUIT:
             self.app.running = False
+        if getattr(self, 'config_overlay', None):
+            try:
+                self.config_overlay.handle_event(event)
+                return
+            except Exception:
+
+                try:
+                    self.config_overlay._done()
+                except Exception:
+                    pass
+                self.config_overlay = None
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
 
-                self.app.go_to_menu()
+                if self.config_overlay:
+
+                    self.config_overlay._done()
+                    self.config_overlay = None
+                else:
+                    self.paused = not self.paused
+
+                return
+
+            if self.paused:
+                if event.key in (pygame.K_UP,):
+                    self.pause_index = (self.pause_index - 1) % len(self.pause_options)
+                elif event.key in (pygame.K_DOWN,):
+                    self.pause_index = (self.pause_index + 1) % len(self.pause_options)
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    choice = self.pause_options[self.pause_index]
+                    if choice == 'CONTINUAR':
+                        self.paused = False
+                    elif choice == 'CONFIGURAÇÃO':
+
+                        from .config_menu import ConfigMenu
+                        self.config_overlay = ConfigMenu(self.app, on_done=self._close_config)
+                    elif choice == 'VOLTAR PARA O MENU':
+                        self.app.go_to_menu()
+
+                return
 
             if event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
                 now = pygame.time.get_ticks()
@@ -91,6 +132,11 @@ class Gameplay:
                 self.player.take_damage(1)
 
     def update(self):
+
+        if self.paused or self.config_overlay:
+
+            return
+
         keys = pygame.key.get_pressed()
         self.player.handle_input(keys)
 
@@ -127,6 +173,9 @@ class Gameplay:
 
         self.camera.update(self.player.rect)
 
+    def _close_config(self):
+        self.config_overlay = None
+
     def render(self, screen):
 
         self.background.draw(screen, self.camera)
@@ -154,6 +203,27 @@ class Gameplay:
 
         if self.is_dead:
             self._draw_death_countdown(screen)
+
+        if self.paused:
+            self._render_pause(screen)
+        if self.config_overlay:
+            self.config_overlay.render(screen)
+
+    def _render_pause(self, screen):
+        w, h = screen.get_size()
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        screen.blit(overlay, (0, 0))
+
+        title = self._choose_game_font(48).render('PAUSADO', True, (255, 255, 255))
+        screen.blit(title, (w // 2 - title.get_width() // 2, 100))
+
+        y = 220
+        for i, opt in enumerate(self.pause_options):
+            color = (255, 220, 100) if i == self.pause_index else (255, 255, 255)
+            text = self._choose_game_font(28).render(opt, True, color)
+            screen.blit(text, (w // 2 - text.get_width() // 2, y))
+            y += 56
 
     def _draw_hp_overlay(self, screen):
         """Draw HP overlay showing current HP / max HP as visual hearts/bars."""
@@ -390,5 +460,4 @@ class Gameplay:
         self.enemies.append(new_enemy)
 
     def update_events(self):
-
         pass
