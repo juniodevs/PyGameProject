@@ -37,7 +37,6 @@ class Gameplay:
 
         self.font = self._choose_game_font(28)
 
-        self.debug_attacks = False  
 
         self.is_dead = False
         self.death_time = 0  
@@ -128,8 +127,6 @@ class Gameplay:
                         pass
                     self.player.attack()
 
-            if event.key == pygame.K_h:
-                self.player.take_damage(1)
 
     def update(self):
 
@@ -139,7 +136,6 @@ class Gameplay:
 
         keys = pygame.key.get_pressed()
         self.player.handle_input(keys)
-
         self.player.update(self.world_width, self.world_height, self.ground_y)
 
         for enemy in self.enemies:
@@ -351,8 +347,6 @@ class Gameplay:
 
                 damage_amount = 2
                 knockback_dir = 1 if self.player.facing > 0 else -1
-                if self.debug_attacks:
-                    print(f"ATTACK hit: attack_rect={attack_rect}, enemy_rect={enemy.rect}, enemy_hitbox={enemy_hitbox}")
                 killed = enemy.take_damage(damage_amount, knockback_dir)
 
                 knockback_strength = 10
@@ -472,28 +466,6 @@ class Gameplay:
         text_rect = hp_text.get_rect(center=(enemy_screen_rect.centerx, bar_y - 12))
         screen.blit(hp_text, text_rect)
 
-    def _draw_debug_hitboxes(self, screen):
-        """Draw debug hitboxes for collision detection testing."""
-
-        player_screen_rect = self.camera.apply(self.player.rect)
-        pygame.draw.rect(screen, (255, 255, 0), player_screen_rect, 2)
-
-        player_hitbox = self.player.get_hitbox()
-        player_hitbox_screen = self.camera.apply(player_hitbox)
-        pygame.draw.rect(screen, (255, 0, 0), player_hitbox_screen, 2)
-
-        for enemy in self.enemies:
-
-            enemy_screen_rect = self.camera.apply(enemy.rect)
-            pygame.draw.rect(screen, (0, 255, 255), enemy_screen_rect, 2)
-
-            enemy_hitbox = enemy.get_hitbox()
-            enemy_hitbox_screen = self.camera.apply(enemy_hitbox)
-            pygame.draw.rect(screen, (255, 0, 255), enemy_hitbox_screen, 2)
-
-        debug_font = self._choose_game_font(20)
-        debug_text = debug_font.render('Amarelo=Player Sprite | Vermelho=Player Hitbox | Ciano=Enemy Sprite | Magenta=Enemy Hitbox', True, (255, 255, 0))
-        screen.blit(debug_text, (10, self.screen_height - 30))
 
     def _spawn_new_enemy(self):
         """Spawn a new enemy at a random location on the map."""
