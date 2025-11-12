@@ -1,7 +1,6 @@
 import pygame
 from ..settings import WHITE
 
-
 class ConfigMenu:
     """Simple configuration overlay to adjust music and SFX volumes.
 
@@ -16,7 +15,6 @@ class ConfigMenu:
         self.title_font = pygame.font.Font(None, 48)
         self.on_done = on_done
 
-        # options: list of tuples (label, getter, setter)
         self.options = [
             ("Música", lambda: int(self.app.audio.music_volume * 100), self._set_music),
             ("SFX", lambda: int(self.app.audio.sfx_volume * 100), self._set_sfx),
@@ -56,11 +54,11 @@ class ConfigMenu:
                 setter(getter() + 5)
                 self._maybe_save()
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                # pressing enter exits config (apply changes)
+
                 self._done()
 
     def _maybe_save(self):
-        # try to persist current values
+
         try:
             from ..utils.config import save_config
             cfg = {
@@ -73,7 +71,7 @@ class ConfigMenu:
             pass
 
     def _done(self):
-        # persist when done
+
         self._maybe_save()
         if callable(self.on_done):
             try:
@@ -86,7 +84,7 @@ class ConfigMenu:
 
     def render(self, screen):
         w, h = screen.get_size()
-        # semi-transparent overlay
+
         overlay = pygame.Surface((w, h), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 160))
         screen.blit(overlay, (0, 0))
@@ -101,5 +99,57 @@ class ConfigMenu:
             screen.blit(text, (w // 2 - text.get_width() // 2, y))
             y += 48
 
-        hint = self.font.render('←/→ ajustar • ↑/↓ navegar • Enter salvar • Esc sair', True, WHITE)
-        screen.blit(hint, (w // 2 - hint.get_width() // 2, h - 110))
+        hint_y = h - 110
+
+        pieces = []
+
+        center_x = w // 2
+
+        txt_ajustar = self.font.render(' ajustar • ', True, WHITE)
+        txt_navegar = self.font.render(' navegar • ', True, WHITE)
+        txt_rest = self.font.render(' Enter salvar • Esc sair', True, WHITE)
+
+        icon_w = 20
+        gap = 6
+        total_w = icon_w + 4 + icon_w + txt_ajustar.get_width() + icon_w + 4 + icon_w + txt_navegar.get_width() + txt_rest.get_width()
+
+        x = center_x - total_w // 2
+
+        self._draw_arrow_icon(screen, x, hint_y, 'left', WHITE)
+        x += icon_w + 4
+
+        self._draw_arrow_icon(screen, x, hint_y, 'right', WHITE)
+        x += icon_w + gap
+
+        screen.blit(txt_ajustar, (x, hint_y))
+        x += txt_ajustar.get_width()
+
+        self._draw_arrow_icon(screen, x, hint_y, 'up', WHITE)
+        x += icon_w + 4
+        self._draw_arrow_icon(screen, x, hint_y, 'down', WHITE)
+        x += icon_w + gap
+
+        screen.blit(txt_navegar, (x, hint_y))
+        x += txt_navegar.get_width()
+        screen.blit(txt_rest, (x, hint_y))
+
+    def _draw_arrow_icon(self, screen, x, y, direction, color=(240, 220, 160)):
+        """Draw a small triangular arrow icon at (x,y). direction in ('left','right','up','down').
+
+        x,y are the top-left of an area approx 20x20 where the icon will be drawn.
+        """
+        w = 20
+        h = 20
+        center_y = y + h // 2
+        if direction in ('left', 'l'):
+            pts = [(x + w - 2, center_y - 6), (x + 2, center_y), (x + w - 2, center_y + 6)]
+        elif direction in ('right', 'r'):
+            pts = [(x + 2, center_y - 6), (x + w - 2, center_y), (x + 2, center_y + 6)]
+        elif direction in ('up', 'u'):
+            pts = [(x + w // 2, center_y - 6), (x + 2, center_y + 6), (x + w - 2, center_y + 6)]
+        else:
+            pts = [(x + 2, center_y - 6), (x + w - 2, center_y - 6), (x + w // 2, center_y + 6)]
+        try:
+            pygame.draw.polygon(screen, color, pts)
+        except Exception:
+            pass
