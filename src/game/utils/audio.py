@@ -209,7 +209,6 @@ class AudioManager:
     def _find_variant_dir(self, category):
         candidates = [
             os.path.join(self.sfx_path, category),
-            os.path.join(self.assets_path, 'aounds', category),
             os.path.join(self.assets_path, 'sounds', category),
         ]
         for c in candidates:

@@ -1,6 +1,5 @@
 import os
 import pygame
-import random
 from ..settings import HITBOX_WIDTH, HITBOX_HEIGHT
 
 class Player:
@@ -353,9 +352,6 @@ class Player:
                 overlay = pygame.Surface(frame.get_size(), pygame.SRCALPHA)
                 overlay.fill((255, 255, 255, 180))
                 surface.blit(overlay, pos)
-
-    def get_rect(self):
-        return self.rect
 
     def get_hitbox(self):
         """Get the actual hitbox for body collision detection.

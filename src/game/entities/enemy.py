@@ -432,9 +432,6 @@ class Enemy:
 
         return pygame.Rect(hitbox_x, hitbox_y, int(self.hitbox_width), int(self.hitbox_height))
 
-    def get_rect(self):
-        """Get the sprite drawing rect."""
-        return self.rect
 
     def is_alive(self):
         """Check if enemy is alive."""
