@@ -252,10 +252,6 @@ class MainMenu:
             self.config_overlay.render(screen)
 
     def _draw_arrow_icon(self, screen, x, y, direction, color=(240, 220, 160)):
-        """Draw a small triangular arrow icon at (x,y). direction in ('left','right','up','down').
-
-        x,y are the top-left of an area approx 18x18 where the icon will be drawn.
-        """
         w = 18
         h = 18
         center_y = y + h // 2
