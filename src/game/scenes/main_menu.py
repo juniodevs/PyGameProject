@@ -69,6 +69,7 @@ class MainMenu:
             ("Mover Direita", "→ / D"),
             ("Pular", "Space"),
             ("Atacar", "Ctrl"),
+            ("Castar Bola de Fogo", "SHIFT"),
             ("Pausar", "Esc"),
         ]
 

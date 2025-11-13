@@ -15,19 +15,33 @@ class GameApp:
         except Exception:
 
             class _NullAudio:
-                def play_sound(self, *a, **k):
+                def play_sound(self, *args, **kwargs):
+                    _ = args
+                    _ = kwargs
                     return None
-                def play_music(self, *a, **k):
+                def play_music(self, *args, **kwargs):
+                    _ = args
+                    _ = kwargs
                     return False
-                def stop_music(self, *a, **k):
+                def stop_music(self, *args, **kwargs):
+                    _ = args
+                    _ = kwargs
                     return None
-                def set_master_volume(self, *a, **k):
+                def set_master_volume(self, *args, **kwargs):
+                    _ = args
+                    _ = kwargs
                     return None
-                def set_sfx_volume(self, *a, **k):
+                def set_sfx_volume(self, *args, **kwargs):
+                    _ = args
+                    _ = kwargs
                     return None
-                def set_music_volume(self, *a, **k):
+                def set_music_volume(self, *args, **kwargs):
+                    _ = args
+                    _ = kwargs
                     return None
-                def preload_folder(self, *a, **k):
+                def preload_folder(self, *args, **kwargs):
+                    _ = args
+                    _ = kwargs
                     return 0
             self.audio = _NullAudio()
 

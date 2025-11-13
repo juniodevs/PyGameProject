@@ -68,8 +68,7 @@ class Enemy:
         self.attack_cooldown_duration = 2000  
         self.locked = False  
 
-        self.pursuing = False
-        self.last_player_x = x
+    # internal pursuit tracking removed (not used externally)
         self._next_attack_is_two = False  
 
         self.knockback_vel_x = 0
@@ -217,67 +216,54 @@ class Enemy:
         self._update_animation(loop=True)
 
     def _update_ai(self, player, now):
-        """Update AI to pursue and attack player while maintaining safe distance."""
+        """Update AI to pursue and attack player while maintaining safe distance.
+
+        Simplified and cleaned: set facing, handle special states, then decide movement
+        based on distances (retreat, attack, detection). Returns after actions that
+        require no further processing (attack/hit/death).
+        """
 
         dist = abs(player.rect.centerx - self.rect.centerx)
 
-        if player.rect.centerx > self.rect.centerx:
-            self.facing = 1
-        else:
-            self.facing = -1
+        # face toward player
+        self.facing = 1 if player.rect.centerx > self.rect.centerx else -1
 
-        self.last_player_x = player.rect.centerx
-
-        if self.state in ('hit', 'death'):
+        # if stunned or dying, don't move
+        if self.state in ('hit', 'death') or self.state.startswith('attack'):
             self.vel_x = 0
             return
 
-        if self.state.startswith('attack'):
-            self.vel_x = 0
-            return
-
+        # If player is very close (retreat area)
         if dist < self.retreat_distance:
+            # if overlapping hitboxes, back away
             if self.get_hitbox().colliderect(player.get_hitbox()):
-
-                if player.rect.centerx > self.rect.centerx:
-                    self.vel_x = -self.speed  
-                else:
-                    self.vel_x = self.speed   
-                self.pursuing = True
+                self.vel_x = -self.speed if player.rect.centerx > self.rect.centerx else self.speed
                 return
 
+            # attempt attack if in range
             if dist < self.attack_distance and self.attack_cooldown == 0:
                 self.attack()
                 self.vel_x = 0
-                self.pursuing = True
                 return
 
+            # otherwise stay still
             self.vel_x = 0
-            self.pursuing = True
             return
 
-        if dist < self.attack_distance and self.attack_cooldown == 0:
-            self.attack()
-            self.vel_x = 0
-            self.pursuing = True
-            return
-
+        # attack if within attack distance
         if dist < self.attack_distance:
-
+            if self.attack_cooldown == 0:
+                self.attack()
             self.vel_x = 0
-            self.pursuing = True
             return
 
+        # pursue if within detection range
         if dist < self.detection_range:
-            if player.rect.centerx > self.rect.centerx:
-                self.vel_x = self.speed
-            else:
-                self.vel_x = -self.speed
-            self.pursuing = True
+            self.vel_x = self.speed if player.rect.centerx > self.rect.centerx else -self.speed
             return
 
+        # default: idle
         self.vel_x = 0
-        self.pursuing = False
 
     def attack(self):
         """Trigger an attack. Alternates between attack1 and attack2."""

@@ -30,7 +30,6 @@ class AudioManager:
             pass
 
         self.sounds = {}  
-        self.channels = {}  
         self.variant_sounds = {}
         self._menu_ramp_thread = None
         self._battle_thread = None
@@ -203,7 +202,7 @@ class AudioManager:
             return name
         return self._find_file(self.music_path, name, self.DEFAULT_MUSIC_EXT)
 
-    def start_battle_music(self, names=('battlemusic1','battlemusic2'), channel_count=2, target_volume=1.0, crossfade_s=3.0):
+    def start_battle_music(self, names=('battlemusic1','battlemusic2'), target_volume=1.0, crossfade_s=3.0):
         files = []
         for n in names:
             p = self._get_music_sound(n)
@@ -239,7 +238,6 @@ class AudioManager:
                 ch.play(snd)
                 length = snd.get_length()
                 start_time = time.time()
-                fade_start = max(0.0, length - float(crossfade_s))
                 ch.set_volume(0.0)
                 ramp_steps = max(1, int(float(crossfade_s) / 0.1))
                 for step in range(ramp_steps):
