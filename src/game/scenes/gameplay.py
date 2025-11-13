@@ -79,10 +79,6 @@ class Gameplay:
         self.config_overlay = None
 
     def _choose_game_font(self, size, bold=False):
-        """Pick a game-like font if available, otherwise fall back to system default.
-
-        Tries a small list of common game/arcade fonts and falls back to SysFont.
-        """
         preferred = [
             'PressStart2P',
             'ArcadeClassic',
