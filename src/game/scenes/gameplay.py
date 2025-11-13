@@ -352,7 +352,7 @@ class Gameplay:
                 except Exception:
                     pass
 
-                while self.kill_count >= self.next_kill_threshold and self.enemy_spawn_limit < 5:
+                while self.kill_count >= self.next_kill_threshold and self.enemy_spawn_limit < 10:
                     self.enemy_spawn_limit += 1
                     self.next_kill_threshold += 5
                     try:
@@ -1032,7 +1032,7 @@ class Gameplay:
 
         # Respect the configured concurrent enemy limit
         try:
-            if len(self.enemies) >= getattr(self, 'enemy_spawn_limit', 5):
+            if len(self.enemies) >= getattr(self, 'enemy_spawn_limit', 10):
                 return
         except Exception:
             pass
