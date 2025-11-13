@@ -27,8 +27,14 @@ class Gameplay:
         self.enemies.append(test_enemy)
 
         self.kill_count = 0
+        # maximum concurrent enemies allowed (starts at current count)
+        self.enemy_spawn_limit = max(1, len(self.enemies))
+        # next kill count at which to increase enemy_spawn_limit
+        self.next_kill_threshold = 5
 
         self.effects = []
+        # transient on-screen alert when a new soldier joins the battle
+        self.spawn_alert = None  # dict with keys: start, duration_ms, limit
 
         self.health_pickup = None
         self.next_health_spawn_time = 0
@@ -218,6 +224,13 @@ class Gameplay:
                     pass
 
         if event.type == pygame.KEYDOWN:
+            # If a spawn alert is active, allow ENTER to dismiss it immediately
+            try:
+                if getattr(self, 'spawn_alert', None) and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    self.spawn_alert = None
+                    return
+            except Exception:
+                pass
             if event.key == pygame.K_ESCAPE:
 
                 if self.config_overlay:
@@ -259,7 +272,8 @@ class Gameplay:
 
     def update(self):
 
-        if self.paused or self.config_overlay:
+        # Pause updates when paused, when config overlay is open, or when a spawn alert is active
+        if self.paused or self.config_overlay or getattr(self, 'spawn_alert', None):
             return
 
         now = pygame.time.get_ticks()
@@ -276,12 +290,36 @@ class Gameplay:
 
             self._check_enemy_attack_collision()
 
+            # Count deaths that have finished their death animation and remove them.
+            deaths_this_frame = 0
             for enemy in self.enemies:
                 if enemy.current_hp <= 0 and now - enemy.death_time > 1000:
-                    self.kill_count += 1
-                    self._spawn_new_enemy()  
+                    deaths_this_frame += 1
 
+            if deaths_this_frame:
+                self.kill_count += deaths_this_frame
+
+                while self.kill_count >= self.next_kill_threshold and self.enemy_spawn_limit < 5:
+                    self.enemy_spawn_limit += 1
+                    self.next_kill_threshold += 5
+                    try:
+                        self.app.audio.play_sound_effect('alert/demonLaugh.mp3', pitch=0.95, volume=0.95)
+                    except Exception:
+                        try:
+                            self.app.audio.play_sound('alert/demonLaugh.mp3')
+                        except Exception:
+                            pass
+                    try:
+                        self._trigger_spawn_alert(self.enemy_spawn_limit)
+                    except Exception:
+                        pass
+
+            # Remove dead enemies now
             self.enemies = [e for e in self.enemies if not (e.current_hp <= 0 and now - e.death_time > 1000)]
+
+            # Maintain enemy count up to the current spawn limit
+            while len(self.enemies) < self.enemy_spawn_limit:
+                self._spawn_new_enemy()
 
             if self.health_pickup is None:
 
@@ -336,6 +374,21 @@ class Gameplay:
     def _close_config(self):
         self.config_overlay = None
 
+    def _trigger_spawn_alert(self, limit):
+        """Set up a transient on-screen alert when a new enemy joins.
+
+        limit: current enemy_spawn_limit (int)
+        """
+        try:
+            self.spawn_alert = {
+                'start': pygame.time.get_ticks(),
+                # keep on screen for 10 seconds by default
+                'duration_ms': 10000,
+                'limit': limit,
+            }
+        except Exception:
+            self.spawn_alert = None
+
     def render(self, screen):
 
         self.background.draw(screen, self.camera)
@@ -375,6 +428,93 @@ class Gameplay:
 
         kills_text = self.font.render(f'Kills: {self.kill_count}', True, WHITE)
         screen.blit(kills_text, (10, 50))
+
+        # Draw spawn alert if active
+        try:
+            if getattr(self, 'spawn_alert', None):
+                now = pygame.time.get_ticks()
+                sa = self.spawn_alert
+                elapsed = now - sa['start']
+                if elapsed < sa['duration_ms']:
+                    w, h = screen.get_size()
+                    # fade progress 0..1
+                    t = elapsed / float(sa['duration_ms'])
+                    # appearance alpha scales down over time
+                    alpha = int(max(0, min(255, 255 * (1.0 - t))))
+
+                    # darken the whole screen slightly behind the alert for readability
+                    try:
+                        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+                        overlay.fill((0, 0, 0, int(200 * (alpha / 255.0))))
+                        screen.blit(overlay, (0, 0))
+                    except Exception:
+                        pass
+
+                    box_h = 160
+                    box_w = min(w - 160, 900)
+                    box_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                    # darker, nearly-opaque background for the box
+                    box_surf.fill((8, 6, 6, int(240 * (alpha / 255.0))))
+
+                    # Draw subtle border (ornamental dark red)
+                    pygame.draw.rect(box_surf, (100, 18, 22, alpha), (0, 0, box_w, box_h), 4, border_radius=8)
+
+                    # Text: main, subtext and hint (slightly smaller fonts for balance)
+                    try:
+                        title_font = self._choose_game_font(40, bold=True)
+                        sub_font = self._choose_game_font(22)
+                        hint_font = self._choose_game_font(18)
+
+                        title = 'MAIS UM SOLDADO ENTROU NA BATALHA'
+                        sub = f'Soldados na batalha: {sa.get("limit", self.enemy_spawn_limit)}'
+                        hint = 'Pressione ENTER para pular'
+
+                        title_surf = title_font.render(title, True, (220, 60, 60))
+                        sub_surf = sub_font.render(sub, True, (230, 210, 160))
+                        hint_surf = hint_font.render(hint, True, (200, 200, 200))
+
+                        # compute dynamic box height to fit texts nicely
+                        padding_top = 18
+                        padding_bot = 18
+                        gap = 10
+                        title_h = title_surf.get_height()
+                        sub_h = sub_surf.get_height()
+                        hint_h = hint_surf.get_height()
+                        content_h = title_h + gap + sub_h + gap + hint_h
+                        box_h = content_h + padding_top + padding_bot
+
+                        # re-create box surface with correct height
+                        box_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                        box_surf.fill((8, 6, 6, int(240 * (alpha / 255.0))))
+                        pygame.draw.rect(box_surf, (100, 18, 22, alpha), (0, 0, box_w, box_h), 4, border_radius=8)
+
+                        # centered positions inside the box
+                        tx = (box_w - title_surf.get_width()) // 2
+                        ty = padding_top
+                        sx = (box_w - sub_surf.get_width()) // 2
+                        sy = ty + title_h + gap
+                        hx = (box_w - hint_surf.get_width()) // 2
+                        hy = sy + sub_h + gap
+
+                        # drop shadow for title
+                        try:
+                            shadow = title_font.render(title, True, (6, 4, 4))
+                            box_surf.blit(shadow, (tx + 3, ty + 3))
+                        except Exception:
+                            pass
+
+                        box_surf.blit(title_surf, (tx, ty))
+                        box_surf.blit(sub_surf, (sx, sy))
+                        box_surf.blit(hint_surf, (hx, hy))
+                    except Exception:
+                        pass
+
+                    # place at center of screen
+                    screen.blit(box_surf, (w // 2 - box_w // 2, h // 2 - box_h // 2))
+                else:
+                    self.spawn_alert = None
+        except Exception:
+            pass
 
         self._draw_hp_overlay(screen)
 
@@ -725,6 +865,12 @@ class Gameplay:
     def _spawn_new_enemy(self):
         """Spawn a new enemy at a random location on the map."""
 
+        # Respect the configured concurrent enemy limit
+        try:
+            if len(self.enemies) >= getattr(self, 'enemy_spawn_limit', 5):
+                return
+        except Exception:
+            pass
         min_spawn_dist = 600  
         while True:
             spawn_x = random.randint(100, self.world_width - 100)
