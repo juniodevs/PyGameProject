@@ -1,7 +1,11 @@
 [tool.poetry]
-name = "pygametest"
+name = "knight-demo-game"
 version = "0.1.0"
-description = "A simple game built with Pygame."
+description = """Knight DEMO Game
+
+Este projeto foi desenvolvido para a disciplina "Linguagem de Programação Aplicada" da UNINTER.
+Curso: Análise e Desenvolvimento de Sistemas
+"""
 authors = ["Júnior Veras <iramarjuniorveras10@gmail.com>"]
 license = "MIT"
 
