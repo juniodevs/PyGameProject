@@ -101,8 +101,6 @@ class ConfigMenu:
 
         hint_y = h - 110
 
-        pieces = []
-
         center_x = w // 2
 
         txt_ajustar = self.font.render(' ajustar • ', True, WHITE)

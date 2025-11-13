@@ -78,9 +78,9 @@ class Health:
         except Exception:
             self.image = img
 
-    def update(self, *args, **kwargs):
+    def update(self):
         # stationary pickup — no logic here for now
-        pass
+        return None
 
     def draw_at(self, surface, pos):
         if self.image:

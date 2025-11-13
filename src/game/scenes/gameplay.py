@@ -77,8 +77,7 @@ class Gameplay:
         self.font = self._choose_game_font(28)
 
         self.is_dead = False
-        self.death_time = 0  
-        self.death_countdown = 5  
+        self.death_time = 0
 
         self.death_menu_active = False
         self.death_menu_options = ['REINICIAR FASE', 'VOLTAR AO MENU']
@@ -1088,7 +1087,6 @@ class Gameplay:
             if player_hb.colliderect(health_hb):
 
                 if self.player.current_hp < self.player.max_hp:
-                    old_hp = self.player.current_hp
                     self.player.current_hp = min(self.player.max_hp, self.player.current_hp + 1)
 
                     self.health_pickup = None
@@ -1101,5 +1099,4 @@ class Gameplay:
         except Exception:
             pass
 
-    def update_events(self):
-        pass
+    

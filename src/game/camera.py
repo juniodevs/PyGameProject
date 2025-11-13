@@ -45,8 +45,3 @@ class Camera:
     def apply(self, rect):
         return rect.move(-self.x - self.offset_x, -self.y - self.offset_y)
 
-    def apply_point(self, x, y):
-        return (x - self.x - self.offset_x, y - self.y - self.offset_y)
-
-    def get_viewport_rect(self):
-        return pygame.Rect(self.x, self.y, self.screen_width, self.screen_height)
