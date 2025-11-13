@@ -3,6 +3,7 @@ import random
 from ..settings import WHITE, ATTACK_RANGE, ATTACK_HEIGHT_FACTOR
 from ..entities.player import Player
 from ..entities.enemy import Enemy
+from ..entities.effects import Hitspark
 from ..entities.health import Health
 from ..camera import Camera
 from ..background import ParallaxBackground
@@ -26,9 +27,15 @@ class Gameplay:
         self.enemies.append(test_enemy)
 
         self.kill_count = 0
+        # maximum concurrent enemies allowed (starts at current count)
+        self.enemy_spawn_limit = max(1, len(self.enemies))
+        # next kill count at which to increase enemy_spawn_limit
+        self.next_kill_threshold = 5
 
-        # Health pickup state: only one exists at a time. When collected, schedule respawn
-        # next_health_spawn_time is in milliseconds since pygame start (0 = not scheduled)
+        self.effects = []
+        # transient on-screen alert when a new soldier joins the battle
+        self.spawn_alert = None  # dict with keys: start, duration_ms, limit
+
         self.health_pickup = None
         self.next_health_spawn_time = 0
 
@@ -37,20 +44,33 @@ class Gameplay:
         self.background = ParallaxBackground(self.screen_width, self.screen_height, self.world_width, self.ground_y)
 
         try:
-            self.app.audio.stop_music(fade_ms=600)
+            prev_scene = getattr(self.app, 'current_scene', None)
+            if not isinstance(prev_scene, Gameplay):
+                try:
+                    self.app.audio.stop_music(fade_ms=600)
+                except Exception:
+                    pass
+                try:
+                    self.app.audio.start_battle_music(('battlemusic1','battlemusic2') , crossfade_s=3.0)
+                except Exception:
+                    pass
         except Exception:
-            pass
-        try:
-            self.app.audio.start_battle_music(('battlemusic1','battlemusic2') , crossfade_s=3.0)
-        except Exception:
-            pass
+
+            try:
+                self.app.audio.stop_music(fade_ms=600)
+            except Exception:
+                pass
+            try:
+                self.app.audio.start_battle_music(('battlemusic1','battlemusic2') , crossfade_s=3.0)
+            except Exception:
+                pass
 
         self.font = self._choose_game_font(28)
 
         self.is_dead = False
         self.death_time = 0  
         self.death_countdown = 5  
-        # death menu (appear after death animation / short delay)
+
         self.death_menu_active = False
         self.death_menu_options = ['REINICIAR FASE', 'VOLTAR AO MENU']
         self.death_menu_index = 0
@@ -65,10 +85,6 @@ class Gameplay:
         self.config_overlay = None
 
     def _choose_game_font(self, size, bold=False):
-        """Pick a game-like font if available, otherwise fall back to system default.
-
-        Tries a small list of common game/arcade fonts and falls back to SysFont.
-        """
         preferred = [
             'PressStart2P',
             'ArcadeClassic',
@@ -102,7 +118,7 @@ class Gameplay:
                 except Exception:
                     pass
                 self.config_overlay = None
-        # If player is dead and death menu is active, intercept input for choice selection
+
         if self.is_dead and self.death_menu_active:
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_UP, pygame.K_w):
@@ -114,9 +130,9 @@ class Gameplay:
                 elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                     choice = self.death_menu_options[self.death_menu_index]
                     if choice == 'REINICIAR FASE':
-                        # restart by reloading this scene
+
                         try:
-                            # restore audio settings from config before restarting
+
                             try:
                                 from ..utils.config import load_config
                                 cfg = load_config()
@@ -130,7 +146,7 @@ class Gameplay:
                                 pass
                             self.app.change_scene(self.__class__)
                         except Exception:
-                            # fallback: go to menu if restart fails
+
                             try:
                                 from ..utils.config import load_config
                                 cfg = load_config()
@@ -144,7 +160,7 @@ class Gameplay:
                                 pass
                             self.app.go_to_menu()
                     else:
-                        # restore audio before returning to menu
+
                         try:
                             from ..utils.config import load_config
                             cfg = load_config()
@@ -159,10 +175,10 @@ class Gameplay:
                         self.app.go_to_menu()
                     return
                 elif event.key == pygame.K_ESCAPE:
-                    # treat as go to menu
+
                     self.app.go_to_menu()
                     return
-            # also allow mouse click on options
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
                 try:
@@ -208,6 +224,13 @@ class Gameplay:
                     pass
 
         if event.type == pygame.KEYDOWN:
+            # If a spawn alert is active, allow ENTER to dismiss it immediately
+            try:
+                if getattr(self, 'spawn_alert', None) and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    self.spawn_alert = None
+                    return
+            except Exception:
+                pass
             if event.key == pygame.K_ESCAPE:
 
                 if self.config_overlay:
@@ -249,13 +272,12 @@ class Gameplay:
 
     def update(self):
 
-        # don't update game logic while paused or config overlay
-        if self.paused or self.config_overlay:
+        # Pause updates when paused, when config overlay is open, or when a spawn alert is active
+        if self.paused or self.config_overlay or getattr(self, 'spawn_alert', None):
             return
 
         now = pygame.time.get_ticks()
 
-        # If player is not dead, run normal update loop
         if not self.is_dead:
             keys = pygame.key.get_pressed()
             self.player.handle_input(keys)
@@ -268,50 +290,82 @@ class Gameplay:
 
             self._check_enemy_attack_collision()
 
+            # Count deaths that have finished their death animation and remove them.
+            deaths_this_frame = 0
             for enemy in self.enemies:
                 if enemy.current_hp <= 0 and now - enemy.death_time > 1000:
-                    self.kill_count += 1
-                    self._spawn_new_enemy()  
+                    deaths_this_frame += 1
 
+            if deaths_this_frame:
+                self.kill_count += deaths_this_frame
+
+                while self.kill_count >= self.next_kill_threshold and self.enemy_spawn_limit < 5:
+                    self.enemy_spawn_limit += 1
+                    self.next_kill_threshold += 5
+                    try:
+                        self.app.audio.play_sound_effect('alert/demonLaugh.mp3', pitch=0.95, volume=0.95)
+                    except Exception:
+                        try:
+                            self.app.audio.play_sound('alert/demonLaugh.mp3')
+                        except Exception:
+                            pass
+                    try:
+                        self._trigger_spawn_alert(self.enemy_spawn_limit)
+                    except Exception:
+                        pass
+
+            # Remove dead enemies now
             self.enemies = [e for e in self.enemies if not (e.current_hp <= 0 and now - e.death_time > 1000)]
 
-            # Health spawn / respawn handling (single pickup)
+            # Maintain enemy count up to the current spawn limit
+            while len(self.enemies) < self.enemy_spawn_limit:
+                self._spawn_new_enemy()
+
             if self.health_pickup is None:
-                # if no pickup exists and no spawn pending, spawn immediately
+
                 if self.next_health_spawn_time == 0:
                     self._spawn_health()
                 else:
-                    # if spawn time reached, spawn the pickup
+
                     if now >= self.next_health_spawn_time:
                         self._spawn_health()
             else:
-                # allow the pickup to perform any per-frame logic if needed
+
                 try:
                     self.health_pickup.update()
                 except Exception:
                     pass
 
-            # Check for player collecting the health pickup
             self._check_health_collision()
+
+            try:
+                for eff in self.effects:
+                    try:
+                        eff.update()
+                    except Exception:
+                        pass
+
+                self.effects = [e for e in self.effects if not getattr(e, 'finished', False)]
+            except Exception:
+                pass
 
             if self.player.current_hp <= 0 and not self.is_dead:
                 self.is_dead = True
                 self.death_time = now
-                # mute sfx immediately because player is dead (avoid attack/hit sounds after death)
+
                 try:
-                    # try to set sfx volume to 0; config will be restored when restarting/going to menu
+
                     self.app.audio.set_sfx_volume(0)
                 except Exception:
                     pass
 
         else:
-            # Player is dead — wait a small delay for death animation, then show death menu
+
             elapsed_ms = now - self.death_time
             if not self.death_menu_active and elapsed_ms >= self.death_menu_delay_ms:
                 self.death_menu_active = True
                 self.death_menu_index = 0
 
-        # keep camera centered on player even after death
         try:
             self.camera.update(self.player.rect)
         except Exception:
@@ -319,6 +373,21 @@ class Gameplay:
 
     def _close_config(self):
         self.config_overlay = None
+
+    def _trigger_spawn_alert(self, limit):
+        """Set up a transient on-screen alert when a new enemy joins.
+
+        limit: current enemy_spawn_limit (int)
+        """
+        try:
+            self.spawn_alert = {
+                'start': pygame.time.get_ticks(),
+                # keep on screen for 10 seconds by default
+                'duration_ms': 10000,
+                'limit': limit,
+            }
+        except Exception:
+            self.spawn_alert = None
 
     def render(self, screen):
 
@@ -332,7 +401,6 @@ class Gameplay:
 
                 self._draw_enemy_hp(screen, enemy, enemy_screen_rect)
 
-        # Draw health pickup (if present)
         if getattr(self, 'health_pickup', None):
             try:
                 hp_screen_rect = self.camera.apply(self.health_pickup.rect)
@@ -346,11 +414,107 @@ class Gameplay:
         if player_screen_rect.right > 0 and player_screen_rect.left < self.screen_width:
             self.player.draw_at(screen, player_screen_rect.topleft)
 
+        try:
+            for eff in self.effects:
+                try:
+                    eff.draw(screen, self.camera)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         instr = self.font.render('Esc - Voltar ao Menu', True, WHITE)
         screen.blit(instr, (10, 10))
 
         kills_text = self.font.render(f'Kills: {self.kill_count}', True, WHITE)
         screen.blit(kills_text, (10, 50))
+
+        # Draw spawn alert if active
+        try:
+            if getattr(self, 'spawn_alert', None):
+                now = pygame.time.get_ticks()
+                sa = self.spawn_alert
+                elapsed = now - sa['start']
+                if elapsed < sa['duration_ms']:
+                    w, h = screen.get_size()
+                    # fade progress 0..1
+                    t = elapsed / float(sa['duration_ms'])
+                    # appearance alpha scales down over time
+                    alpha = int(max(0, min(255, 255 * (1.0 - t))))
+
+                    # darken the whole screen slightly behind the alert for readability
+                    try:
+                        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+                        overlay.fill((0, 0, 0, int(200 * (alpha / 255.0))))
+                        screen.blit(overlay, (0, 0))
+                    except Exception:
+                        pass
+
+                    box_h = 160
+                    box_w = min(w - 160, 900)
+                    box_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                    # darker, nearly-opaque background for the box
+                    box_surf.fill((8, 6, 6, int(240 * (alpha / 255.0))))
+
+                    # Draw subtle border (ornamental dark red)
+                    pygame.draw.rect(box_surf, (100, 18, 22, alpha), (0, 0, box_w, box_h), 4, border_radius=8)
+
+                    # Text: main, subtext and hint (slightly smaller fonts for balance)
+                    try:
+                        title_font = self._choose_game_font(40, bold=True)
+                        sub_font = self._choose_game_font(22)
+                        hint_font = self._choose_game_font(18)
+
+                        title = 'MAIS UM SOLDADO ENTROU NA BATALHA'
+                        sub = f'Soldados na batalha: {sa.get("limit", self.enemy_spawn_limit)}'
+                        hint = 'Pressione ENTER para pular'
+
+                        title_surf = title_font.render(title, True, (220, 60, 60))
+                        sub_surf = sub_font.render(sub, True, (230, 210, 160))
+                        hint_surf = hint_font.render(hint, True, (200, 200, 200))
+
+                        # compute dynamic box height to fit texts nicely
+                        padding_top = 18
+                        padding_bot = 18
+                        gap = 10
+                        title_h = title_surf.get_height()
+                        sub_h = sub_surf.get_height()
+                        hint_h = hint_surf.get_height()
+                        content_h = title_h + gap + sub_h + gap + hint_h
+                        box_h = content_h + padding_top + padding_bot
+
+                        # re-create box surface with correct height
+                        box_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                        box_surf.fill((8, 6, 6, int(240 * (alpha / 255.0))))
+                        pygame.draw.rect(box_surf, (100, 18, 22, alpha), (0, 0, box_w, box_h), 4, border_radius=8)
+
+                        # centered positions inside the box
+                        tx = (box_w - title_surf.get_width()) // 2
+                        ty = padding_top
+                        sx = (box_w - sub_surf.get_width()) // 2
+                        sy = ty + title_h + gap
+                        hx = (box_w - hint_surf.get_width()) // 2
+                        hy = sy + sub_h + gap
+
+                        # drop shadow for title
+                        try:
+                            shadow = title_font.render(title, True, (6, 4, 4))
+                            box_surf.blit(shadow, (tx + 3, ty + 3))
+                        except Exception:
+                            pass
+
+                        box_surf.blit(title_surf, (tx, ty))
+                        box_surf.blit(sub_surf, (sx, sy))
+                        box_surf.blit(hint_surf, (hx, hy))
+                    except Exception:
+                        pass
+
+                    # place at center of screen
+                    screen.blit(box_surf, (w // 2 - box_w // 2, h // 2 - box_h // 2))
+                else:
+                    self.spawn_alert = None
+        except Exception:
+            pass
 
         self._draw_hp_overlay(screen)
 
@@ -463,7 +627,7 @@ class Gameplay:
 
     def _draw_death_countdown(self, screen):
         """Draw death screen with countdown to return to menu."""
-        # Minimal overlay when dead before the death menu appears (no countdown text)
+
         overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
@@ -492,7 +656,6 @@ class Gameplay:
             txt_x = w // 2 - txt.get_width() // 2
             txt_y = base_y + i * 56
 
-            # button background for clarity
             rect = pygame.Rect(txt_x - 12, txt_y - 6, txt.get_width() + 24, txt.get_height() + 12)
             pygame.draw.rect(screen, (40, 40, 40), rect, border_radius=6)
             if is_sel:
@@ -572,6 +735,15 @@ class Gameplay:
                     )
                 except Exception:
                     pass
+
+                try:
+                    try:
+                        hit_x, hit_y = enemy.get_hitbox().center
+                    except Exception:
+                        hit_x, hit_y = enemy.rect.centerx, enemy.rect.centery
+                    self.effects.append(Hitspark(hit_x, hit_y))
+                except Exception:
+                    pass
                 try:
                     self.app.trigger_zoom(duration_ms=220, magnitude=1.06)
                 except Exception:
@@ -639,6 +811,15 @@ class Gameplay:
                     pass
 
                 try:
+                    try:
+                        px, py = player_hitbox.center
+                    except Exception:
+                        px, py = self.player.rect.centerx, self.player.rect.centery
+                    self.effects.append(Hitspark(px, py))
+                except Exception:
+                    pass
+
+                try:
                     self.app.audio.play_variant('hit')
                 except Exception:
                     pass
@@ -684,6 +865,12 @@ class Gameplay:
     def _spawn_new_enemy(self):
         """Spawn a new enemy at a random location on the map."""
 
+        # Respect the configured concurrent enemy limit
+        try:
+            if len(self.enemies) >= getattr(self, 'enemy_spawn_limit', 5):
+                return
+        except Exception:
+            pass
         min_spawn_dist = 600  
         while True:
             spawn_x = random.randint(100, self.world_width - 100)
@@ -694,7 +881,6 @@ class Gameplay:
         spawn_y = self.ground_y - 160
         new_enemy = Enemy(spawn_x, spawn_y)
         self.enemies.append(new_enemy)
-
 
     def _spawn_health(self):
         """Spawn a health pickup somewhere on the map, ensuring it's a reasonable distance from the player.
@@ -707,28 +893,24 @@ class Gameplay:
         attempts = 0
         while True:
             spawn_x = random.randint(100, self.world_width - 100)
-            # ensure not too close to player
+
             if abs(spawn_x - self.player.rect.centerx) > min_spawn_dist:
                 break
             attempts += 1
             if attempts > 30:
-                # give up and use whatever we have
+
                 break
 
-        # place the pickup slightly above the ground so its hitbox overlaps the player's hitbox
-        # when the player is standing on the ground. The health image still appears near the ground.
         spawn_y = self.ground_y - 48 - 12
         try:
             self.health_pickup = Health(spawn_x, spawn_y)
         except Exception:
-            # robust fallback: create a very simple rect-based placeholder
+
             import pygame
             h = Health(spawn_x, spawn_y)
             self.health_pickup = h
 
-        # clear any scheduled spawn time since we've spawned it
         self.next_health_spawn_time = 0
-
 
     def _check_health_collision(self):
         """Check whether the player collected the health pickup. If so, heal and schedule respawn in 30s."""
@@ -739,15 +921,14 @@ class Gameplay:
             player_hb = self.player.get_hitbox()
             health_hb = self.health_pickup.get_hitbox()
             if player_hb.colliderect(health_hb):
-                # Only collect if player is not at full HP. If at max HP, do nothing
-                # so the pickup remains in the world and the player can pass over it.
+
                 if self.player.current_hp < self.player.max_hp:
                     old_hp = self.player.current_hp
                     self.player.current_hp = min(self.player.max_hp, self.player.current_hp + 1)
-                    # remove pickup and schedule next spawn in 30s
+
                     self.health_pickup = None
                     self.next_health_spawn_time = pygame.time.get_ticks() + 30000
-                    # play pickup sfx if available
+
                     try:
                         self.app.audio.play_sound_effect('heal')
                     except Exception:

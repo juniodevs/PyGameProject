@@ -1,7 +1,6 @@
 import pygame
 from .utils.audio import AudioManager
 
-
 class GameApp:
     def __init__(self):
         import pygame
@@ -10,11 +9,11 @@ class GameApp:
         from .settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
 
         pygame.init()
-        # Initialize audio manager before creating scenes so scenes can play music immediately
+
         try:
             self.audio = AudioManager()
         except Exception:
-            # If audio initialization fails for any reason, provide a fallback object with same API
+
             class _NullAudio:
                 def play_sound(self, *a, **k):
                     return None
@@ -31,7 +30,7 @@ class GameApp:
                 def preload_folder(self, *a, **k):
                     return 0
             self.audio = _NullAudio()
-        # Load persisted config (music/sfx volumes) if available and apply to audio manager
+
         try:
             from .utils.config import load_config
             cfg = load_config()
@@ -43,18 +42,18 @@ class GameApp:
                 pass
         except Exception:
             pass
-        # actual display surface
+
         self.display = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Pygame Game")
-        # backbuffer where scenes render (so we can scale/zoom before presenting)
+
         self.screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.clock = pygame.time.Clock()
         self.running = True
         self.FPS = FPS
-        # Time scale for slow-motion effects (1.0 = normal speed)
+
         self.time_scale = 1.0
         self.slow_motion_end = 0
-        # Zoom state (for brief impact zooms)
+
         self._zoom_start = 0
         self._zoom_duration = 0
         self._zoom_mag = 1.0
@@ -65,16 +64,13 @@ class GameApp:
             self.handle_events()
             self.current_scene.update()
 
-            # Render the scene into the backbuffer
             self.current_scene.render(self.screen)
 
-            # Update slow-motion timer
             now = pygame.time.get_ticks()
             if self.slow_motion_end and now >= self.slow_motion_end:
                 self.time_scale = 1.0
                 self.slow_motion_end = 0
 
-            # Compute zoom (go-and-back curve)
             zoom = 1.0
             if self._zoom_start and now < self._zoom_start + self._zoom_duration:
                 t = now - self._zoom_start
@@ -90,7 +86,6 @@ class GameApp:
                     self._zoom_duration = 0
                     self._zoom_mag = 1.0
 
-            # Apply zoom by scaling the backbuffer to the display surface
             sw, sh = self.screen.get_size()
             if abs(zoom - 1.0) > 0.0001:
                 scaled_w = max(1, int(sw * zoom))
@@ -117,13 +112,27 @@ class GameApp:
             self.current_scene.handle_event(event)
 
     def change_scene(self, scene):
-        # scene should be a class (callable) that accepts the app instance
+
         self.current_scene = scene(self)
 
     def go_to_menu(self):
         """Convenience method for scenes to return to main menu without importing it."""
-        from .scenes.main_menu import MainMenu
-        self.current_scene = MainMenu(self)
+        try:
+            from .scenes.main_menu import MainMenu
+            from .scenes.load_screen import LoadScreen
+            prev = None
+            try:
+                prev = self.screen.copy()
+            except Exception:
+                prev = None
+            # pass previous screen so LoadScreen can animate a melt/datamosh
+            self.change_scene(lambda app, p=prev: LoadScreen(app, target=MainMenu, message='VOLTANDO AO MENU...', duration_ms=600, prev_surface=p))
+        except Exception:
+            try:
+                from .scenes.main_menu import MainMenu
+                self.current_scene = MainMenu(self)
+            except Exception:
+                pass
 
     def trigger_slow_motion(self, duration_ms=200, scale=0.3):
         """Activate a brief slow-motion effect.
@@ -136,7 +145,12 @@ class GameApp:
         self.slow_motion_end = pygame.time.get_ticks() + int(duration_ms)
 
     def trigger_zoom(self, duration_ms=220, magnitude=1.08):
-        """Trigger a brief zoom-in then back effect."""
+        """Trigger a brief zoom-in then back effect.
+
+        Args:
+            duration_ms: Duration in milliseconds
+            magnitude: Zoom magnitude (>= 1.0)
+        """
         self._zoom_start = pygame.time.get_ticks()
         self._zoom_duration = int(duration_ms)
         self._zoom_mag = max(1.0, float(magnitude))

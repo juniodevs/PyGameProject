@@ -31,7 +31,7 @@ class MainMenu:
             self.font_controls = self.font
         self.title_text = 'KNIGHT DEMO GAME'
 
-        self.options = ['START GAME', 'CONFIGURAÇÃO', 'SAIR']
+        self.options = ['INICIAR GAME', 'CONFIGURAÇÃO', 'SAIR']
         self.selected = 0
 
         sw, sh = self.screen.get_size()
@@ -54,6 +54,15 @@ class MainMenu:
             pass
 
         self.config_overlay = None
+        # confirmation dialog state for exiting
+        self.confirm_exit = False
+        # 0 -> NÃO (default), 1 -> SIM
+        self.confirm_choice = 0
+        # fade/animation for confirmation dialog
+        self._confirm_alpha = 0
+        self._confirm_fade_ms = 220
+        self._confirm_fade_start = None
+        self._confirm_closing = False
 
         self.controls = [
             ("Mover Esquerda", "← / A"),
@@ -68,10 +77,29 @@ class MainMenu:
             self.app.audio.play_sound('select')
         except Exception:
             pass
-        import importlib
-        mod = importlib.import_module('game.scenes.gameplay')
-        Gameplay = getattr(mod, 'Gameplay')
-        self.app.change_scene(Gameplay)
+
+        try:
+            import importlib
+            mod = importlib.import_module('game.scenes.gameplay')
+            Gameplay = getattr(mod, 'Gameplay')
+
+            try:
+                from .load_screen import LoadScreen
+                prev = None
+                try:
+                    prev = self.screen.copy()
+                except Exception:
+                    prev = None
+                self.app.change_scene(lambda app, p=prev: LoadScreen(app, target=Gameplay, message='CARREGANDO JOGO...', duration_ms=700, prev_surface=p))
+                return
+            except Exception:
+                self.app.change_scene(Gameplay)
+                return
+        except Exception:
+            try:
+                self.app.change_scene('game.scenes.gameplay')
+            except Exception:
+                pass
 
     def handle_event(self, event):
         if self.config_overlay:
@@ -80,33 +108,106 @@ class MainMenu:
         if event.type == pygame.QUIT:
             self.app.running = False
         if event.type == pygame.KEYDOWN:
+            # If confirm dialog is open, only handle dialog keys (block up/down menu navigation)
+            if self.confirm_exit:
+                if event.key in (pygame.K_LEFT, pygame.K_a):
+                    self.confirm_choice = max(0, self.confirm_choice - 1)
+                    try:
+                        self.app.audio.play_sound('select')
+                    except Exception:
+                        pass
+                    return
+                elif event.key in (pygame.K_RIGHT, pygame.K_d):
+                    self.confirm_choice = min(1, self.confirm_choice + 1)
+                    try:
+                        self.app.audio.play_sound('select')
+                    except Exception:
+                        pass
+                    return
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    if self.confirm_choice == 1:
+                        try:
+                            self.app.audio.play_sound('select')
+                        except Exception:
+                            pass
+                        self.app.running = False
+                        return
+                    else:
+                        try:
+                            self.app.audio.play_sound('select')
+                        except Exception:
+                            pass
+                        # start fade-out/close
+                        self._confirm_closing = True
+                        self._confirm_fade_start = pygame.time.get_ticks()
+                        return
+                elif event.key == pygame.K_ESCAPE:
+                    # start fade-out/close
+                    self._confirm_closing = True
+                    self._confirm_fade_start = pygame.time.get_ticks()
+                    try:
+                        self.app.audio.play_sound('select')
+                    except Exception:
+                        pass
+                    return
+                # swallow any other keys while confirm dialog is open
+                return
+
+            # normal menu navigation (only active when confirm dialog is not open)
             if event.key in (pygame.K_UP, pygame.K_w):
                 self.selected = (self.selected - 1) % len(self.options)
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self.selected = (self.selected + 1) % len(self.options)
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 choice = self.options[self.selected]
-                if choice == 'START GAME':
+                if choice == 'INICIAR GAME':
                     self._start_game()
                 elif choice == 'CONFIGURAÇÃO':
-
                     self.config_overlay = ConfigMenu(self.app, on_done=self._close_config)
                 elif choice == 'SAIR':
-
                     try:
                         self.app.audio.play_sound('select')
                     except Exception:
                         pass
-                    self.app.running = False
+                    # open confirmation dialog (start fade-in)
+                    self.confirm_exit = True
+                    self._confirm_closing = False
+                    self._confirm_fade_start = pygame.time.get_ticks()
+                    self._confirm_alpha = 0
+                    self.confirm_choice = 0
             elif event.key == pygame.K_ESCAPE:
-                self.app.running = False
+                # open confirmation dialog instead of immediate exit
+                try:
+                    self.app.audio.play_sound('select')
+                except Exception:
+                    pass
+                self.confirm_exit = True
+                self._confirm_closing = False
+                self._confirm_fade_start = pygame.time.get_ticks()
+                self._confirm_alpha = 0
+                self.confirm_choice = 0
 
     def _close_config(self):
         self.config_overlay = None
 
     def update(self):
-
         now = pygame.time.get_ticks()
+        # update confirmation dialog fade
+        if self.confirm_exit or self._confirm_closing:
+            if self._confirm_fade_start is None:
+                self._confirm_fade_start = now
+            elapsed_f = now - self._confirm_fade_start
+            t = min(1.0, float(elapsed_f) / max(1, self._confirm_fade_ms))
+            if not self._confirm_closing:
+                self._confirm_alpha = int(255 * t)
+            else:
+                self._confirm_alpha = int(255 * (1.0 - t))
+                if t >= 1.0:
+                    # finish closing
+                    self.confirm_exit = False
+                    self._confirm_closing = False
+                    self._confirm_fade_start = None
+
         if now >= self._dir_change_time:
             self._auto_dir *= -1
             self._dir_change_time = now + 1200 + (now % 400)
@@ -235,11 +336,54 @@ class MainMenu:
         if self.config_overlay:
             self.config_overlay.render(screen)
 
-    def _draw_arrow_icon(self, screen, x, y, direction, color=(240, 220, 160)):
-        """Draw a small triangular arrow icon at (x,y). direction in ('left','right','up','down').
+        # confirmation dialog for exiting (with fade)
+        if self._confirm_alpha > 0:
+            box_w = 420
+            box_h = 140
+            bx = sw // 2 - box_w // 2
+            by = sh // 2 - box_h // 2
 
-        x,y are the top-left of an area approx 18x18 where the icon will be drawn.
-        """
+            # dim the background with a semi-transparent overlay
+            overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+            overlay.fill((8, 8, 12, int(150 * (self._confirm_alpha / 255.0))))
+            screen.blit(overlay, (0, 0))
+
+            # dialog surface with alpha
+            dialog = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+            dialog.fill((18, 18, 22, self._confirm_alpha))
+            # border
+            pygame.draw.rect(dialog, (120, 110, 80, self._confirm_alpha), (2, 2, box_w - 4, box_h - 4), width=2, border_radius=6)
+            screen.blit(dialog, (bx, by))
+
+            # message
+            msg = self.font.render('Deseja sair do jogo?', True, (240, 240, 240))
+            msg.set_alpha(self._confirm_alpha)
+            screen.blit(msg, (sw // 2 - msg.get_width() // 2, by + 18))
+
+            # options
+            col_no = (220, 220, 220) if self.confirm_choice == 0 else (150, 150, 150)
+            col_yes = (220, 220, 220) if self.confirm_choice == 1 else (150, 150, 150)
+            opt_no = self.font.render('NÃO', True, col_no)
+            opt_yes = self.font.render('SIM', True, col_yes)
+            opt_no.set_alpha(self._confirm_alpha)
+            opt_yes.set_alpha(self._confirm_alpha)
+
+            opts_y = by + 70
+            gap = 80
+            total_w = opt_no.get_width() + gap + opt_yes.get_width()
+            ox = sw // 2 - total_w // 2
+
+            screen.blit(opt_no, (ox, opts_y))
+            screen.blit(opt_yes, (ox + opt_no.get_width() + gap, opts_y))
+
+            # highlight selected (draw on main surface so alpha applies to stroke too)
+            sel_x = ox if self.confirm_choice == 0 else (ox + opt_no.get_width() + gap)
+            sel_w = opt_no.get_width() if self.confirm_choice == 0 else opt_yes.get_width()
+            hl_surf = pygame.Surface((sel_w + 16, opt_no.get_height() + 12), pygame.SRCALPHA)
+            pygame.draw.rect(hl_surf, (255, 200, 120, self._confirm_alpha), (0, 0, sel_w + 16, opt_no.get_height() + 12), width=2, border_radius=6)
+            screen.blit(hl_surf, (sel_x - 8, opts_y - 6))
+
+    def _draw_arrow_icon(self, screen, x, y, direction, color=(240, 220, 160)):
         w = 18
         h = 18
         center_y = y + h // 2
