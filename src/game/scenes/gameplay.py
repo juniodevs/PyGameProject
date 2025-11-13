@@ -4,7 +4,9 @@ from ..settings import WHITE, ATTACK_RANGE, ATTACK_HEIGHT_FACTOR
 from ..entities.player import Player
 from ..entities.enemy import Enemy
 from ..entities.effects import Hitspark
+from ..entities.effects.fireinbody import FireInBody
 from ..entities.health import Health
+from ..entities.effects.fireball import Fireball
 from ..camera import Camera
 from ..background import ParallaxBackground
 
@@ -35,6 +37,13 @@ class Gameplay:
         self.effects = []
         # transient on-screen alert when a new soldier joins the battle
         self.spawn_alert = None  # dict with keys: start, duration_ms, limit
+        # mana system for spells
+        self.max_mana = 100
+        self.mana = 0
+        self.mana_per_kill = 50  # increase per enemy killed (2 kills -> full mana)
+
+        # active projectiles (fireballs)
+        self.projectiles = []
 
         self.health_pickup = None
         self.next_health_spawn_time = 0
@@ -231,6 +240,44 @@ class Gameplay:
                     return
             except Exception:
                 pass
+            # Spell cast with SHIFT
+            if event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
+                try:
+                    # cannot cast while alert is active or while locked
+                    if getattr(self, 'spawn_alert', None):
+                        return
+                    if getattr(self.player, 'locked', False):
+                        return
+                    if self.mana >= self.max_mana:
+                        # consume mana
+                        self.mana = 0
+                        # play cast animation and lock player
+                        try:
+                            self.player.attack()
+                        except Exception:
+                            try:
+                                self.player._set_state('attack1')
+                            except Exception:
+                                pass
+                        # spawn fireball from player's center
+                        try:
+                            hb = self.player.get_hitbox()
+                            fx = hb.centerx
+                            fy = hb.centery
+                            fb = Fireball(fx, fy, self.player.facing)
+                            self.projectiles.append(fb)
+                        except Exception:
+                            pass
+                        try:
+                            # play launch SFX (file in assets/sounds/playereffects/fireBallSFX.mp3)
+                            self.app.audio.play_sound_effect('playereffects/fireBallSFX.mp3', volume=0.95)
+                        except Exception:
+                            try:
+                                self.app.audio.play_sound('playereffects/fireBallSFX.mp3')
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
             if event.key == pygame.K_ESCAPE:
 
                 if self.config_overlay:
@@ -299,6 +346,12 @@ class Gameplay:
             if deaths_this_frame:
                 self.kill_count += deaths_this_frame
 
+                # reward mana per kill
+                try:
+                    self.mana = min(self.max_mana, self.mana + self.mana_per_kill * deaths_this_frame)
+                except Exception:
+                    pass
+
                 while self.kill_count >= self.next_kill_threshold and self.enemy_spawn_limit < 5:
                     self.enemy_spawn_limit += 1
                     self.next_kill_threshold += 5
@@ -320,6 +373,66 @@ class Gameplay:
             # Maintain enemy count up to the current spawn limit
             while len(self.enemies) < self.enemy_spawn_limit:
                 self._spawn_new_enemy()
+
+            # update projectiles
+            try:
+                for p in self.projectiles:
+                    try:
+                        p.update(self.world_width, self.world_height)
+                    except Exception:
+                        pass
+                # check collisions: fireball -> enemies
+                for p in list(self.projectiles):
+                    if getattr(p, 'finished', False):
+                        continue
+                    phb = p.get_hitbox()
+                    for enemy in self.enemies:
+                        try:
+                            if phb.colliderect(enemy.get_hitbox()):
+                                # Apply damage via enemy.take_damage so enemy plays its death animation.
+                                try:
+                                    # attempt to deal exactly the enemy's remaining HP
+                                    remaining = getattr(enemy, 'current_hp', 0)
+                                    if remaining <= 0:
+                                        remaining = getattr(enemy, 'max_hp', 1)
+                                    enemy.take_damage(remaining, 0)
+                                except Exception:
+                                    try:
+                                        enemy.current_hp = 0
+                                        enemy.death_time = pygame.time.get_ticks()
+                                    except Exception:
+                                        pass
+
+                                # determine impact offset (so the fire effect anchors where projectile hit)
+                                try:
+                                    try:
+                                        impact_y = phb.centery
+                                    except Exception:
+                                        impact_y = p.get_hitbox().centery
+                                    offset = int(impact_y - enemy.rect.centery)
+                                except Exception:
+                                    offset = 0
+
+                                # attach persistent fire-in-body effect that follows the enemy at impact offset
+                                try:
+                                    self.effects.append(FireInBody(enemy, impact_offset_y=offset))
+                                except Exception:
+                                    pass
+
+                                # play the same hit variant sound used elsewhere
+                                try:
+                                    self.app.audio.play_variant('hit')
+                                except Exception:
+                                    pass
+
+                                p.finished = True
+                                break
+                        except Exception:
+                            pass
+                # remove finished
+                self.projectiles = [p for p in self.projectiles if not getattr(p, 'finished', False)]
+            except Exception:
+                pass
 
             if self.health_pickup is None:
 
@@ -423,11 +536,27 @@ class Gameplay:
         except Exception:
             pass
 
+        # draw projectiles (fireballs)
+        try:
+            for p in self.projectiles:
+                try:
+                    p.draw(screen, camera=self.camera)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         instr = self.font.render('Esc - Voltar ao Menu', True, WHITE)
         screen.blit(instr, (10, 10))
 
         kills_text = self.font.render(f'Kills: {self.kill_count}', True, WHITE)
         screen.blit(kills_text, (10, 50))
+
+        # Draw mana overlay
+        try:
+            self._draw_mana_overlay(screen)
+        except Exception:
+            pass
 
         # Draw spawn alert if active
         try:
@@ -624,6 +753,42 @@ class Gameplay:
             pygame.draw.rect(screen, (0, 0, 0), (bar_x, bar_y, bar_width, bar_height), 2)  
 
             bar_x += bar_width + bar_gap
+
+    def _draw_mana_overlay(self, screen):
+        """Draw mana bar near HP overlay."""
+        try:
+            hp_x = self.screen_width - 200
+            # draw below HP
+            x = hp_x
+            y = 20 + 35 + 40
+
+
+            label = self.font.render(f'MANA: {int(self.mana)}/{self.max_mana}', True, (160, 200, 255))
+            screen.blit(label, (x, y))
+
+            # place the bar with comfortable spacing below the label
+            bar_width = 120
+            bar_height = 16
+            bar_x = x
+            try:
+                label_h = label.get_height()
+            except Exception:
+                label_h = 18
+            bar_y = y + label_h + 12
+
+            # background
+            pygame.draw.rect(screen, (40, 40, 60), (bar_x, bar_y, bar_width, bar_height))
+            # filled
+            try:
+                ratio = max(0.0, min(1.0, float(self.mana) / float(self.max_mana)))
+            except Exception:
+                ratio = 0.0
+            filled = int(bar_width * ratio)
+            if filled > 0:
+                pygame.draw.rect(screen, (80, 160, 255), (bar_x, bar_y, filled, bar_height))
+            pygame.draw.rect(screen, (200, 220, 255), (bar_x, bar_y, bar_width, bar_height), 2)
+        except Exception:
+            pass
 
     def _draw_death_countdown(self, screen):
         """Draw death screen with countdown to return to menu."""
