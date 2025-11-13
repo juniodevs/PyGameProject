@@ -31,7 +31,7 @@ class MainMenu:
             self.font_controls = self.font
         self.title_text = 'KNIGHT DEMO GAME'
 
-        self.options = ['START GAME', 'CONFIGURAÇÃO', 'SAIR']
+        self.options = ['INICIAR GAME', 'CONFIGURAÇÃO', 'SAIR']
         self.selected = 0
 
         sw, sh = self.screen.get_size()
@@ -68,10 +68,29 @@ class MainMenu:
             self.app.audio.play_sound('select')
         except Exception:
             pass
-        import importlib
-        mod = importlib.import_module('game.scenes.gameplay')
-        Gameplay = getattr(mod, 'Gameplay')
-        self.app.change_scene(Gameplay)
+
+        try:
+            import importlib
+            mod = importlib.import_module('game.scenes.gameplay')
+            Gameplay = getattr(mod, 'Gameplay')
+
+            try:
+                from .load_screen import LoadScreen
+                prev = None
+                try:
+                    prev = self.screen.copy()
+                except Exception:
+                    prev = None
+                self.app.change_scene(lambda app, p=prev: LoadScreen(app, target=Gameplay, message='CARREGANDO JOGO...', duration_ms=700, prev_surface=p))
+                return
+            except Exception:
+                self.app.change_scene(Gameplay)
+                return
+        except Exception:
+            try:
+                self.app.change_scene('game.scenes.gameplay')
+            except Exception:
+                pass
 
     def handle_event(self, event):
         if self.config_overlay:
@@ -86,13 +105,11 @@ class MainMenu:
                 self.selected = (self.selected + 1) % len(self.options)
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 choice = self.options[self.selected]
-                if choice == 'START GAME':
+                if choice == 'INICIAR GAME':
                     self._start_game()
                 elif choice == 'CONFIGURAÇÃO':
-
                     self.config_overlay = ConfigMenu(self.app, on_done=self._close_config)
                 elif choice == 'SAIR':
-
                     try:
                         self.app.audio.play_sound('select')
                     except Exception:
@@ -105,7 +122,6 @@ class MainMenu:
         self.config_overlay = None
 
     def update(self):
-
         now = pygame.time.get_ticks()
         if now >= self._dir_change_time:
             self._auto_dir *= -1

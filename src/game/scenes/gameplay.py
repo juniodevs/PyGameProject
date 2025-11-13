@@ -28,11 +28,8 @@ class Gameplay:
 
         self.kill_count = 0
 
-        # active transient visual effects (Hitspark instances)
         self.effects = []
 
-        # Health pickup state: only one exists at a time. When collected, schedule respawn
-        # next_health_spawn_time is in milliseconds since pygame start (0 = not scheduled)
         self.health_pickup = None
         self.next_health_spawn_time = 0
 
@@ -41,20 +38,33 @@ class Gameplay:
         self.background = ParallaxBackground(self.screen_width, self.screen_height, self.world_width, self.ground_y)
 
         try:
-            self.app.audio.stop_music(fade_ms=600)
+            prev_scene = getattr(self.app, 'current_scene', None)
+            if not isinstance(prev_scene, Gameplay):
+                try:
+                    self.app.audio.stop_music(fade_ms=600)
+                except Exception:
+                    pass
+                try:
+                    self.app.audio.start_battle_music(('battlemusic1','battlemusic2') , crossfade_s=3.0)
+                except Exception:
+                    pass
         except Exception:
-            pass
-        try:
-            self.app.audio.start_battle_music(('battlemusic1','battlemusic2') , crossfade_s=3.0)
-        except Exception:
-            pass
+
+            try:
+                self.app.audio.stop_music(fade_ms=600)
+            except Exception:
+                pass
+            try:
+                self.app.audio.start_battle_music(('battlemusic1','battlemusic2') , crossfade_s=3.0)
+            except Exception:
+                pass
 
         self.font = self._choose_game_font(28)
 
         self.is_dead = False
         self.death_time = 0  
         self.death_countdown = 5  
-        # death menu (appear after death animation / short delay)
+
         self.death_menu_active = False
         self.death_menu_options = ['REINICIAR FASE', 'VOLTAR AO MENU']
         self.death_menu_index = 0
@@ -106,7 +116,7 @@ class Gameplay:
                 except Exception:
                     pass
                 self.config_overlay = None
-        # If player is dead and death menu is active, intercept input for choice selection
+
         if self.is_dead and self.death_menu_active:
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_UP, pygame.K_w):
@@ -118,9 +128,9 @@ class Gameplay:
                 elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                     choice = self.death_menu_options[self.death_menu_index]
                     if choice == 'REINICIAR FASE':
-                        # restart by reloading this scene
+
                         try:
-                            # restore audio settings from config before restarting
+
                             try:
                                 from ..utils.config import load_config
                                 cfg = load_config()
@@ -134,7 +144,7 @@ class Gameplay:
                                 pass
                             self.app.change_scene(self.__class__)
                         except Exception:
-                            # fallback: go to menu if restart fails
+
                             try:
                                 from ..utils.config import load_config
                                 cfg = load_config()
@@ -148,7 +158,7 @@ class Gameplay:
                                 pass
                             self.app.go_to_menu()
                     else:
-                        # restore audio before returning to menu
+
                         try:
                             from ..utils.config import load_config
                             cfg = load_config()
@@ -163,10 +173,10 @@ class Gameplay:
                         self.app.go_to_menu()
                     return
                 elif event.key == pygame.K_ESCAPE:
-                    # treat as go to menu
+
                     self.app.go_to_menu()
                     return
-            # also allow mouse click on options
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = event.pos
                 try:
@@ -253,13 +263,11 @@ class Gameplay:
 
     def update(self):
 
-        # don't update game logic while paused or config overlay
         if self.paused or self.config_overlay:
             return
 
         now = pygame.time.get_ticks()
 
-        # If player is not dead, run normal update loop
         if not self.is_dead:
             keys = pygame.key.get_pressed()
             self.player.handle_input(keys)
@@ -279,33 +287,30 @@ class Gameplay:
 
             self.enemies = [e for e in self.enemies if not (e.current_hp <= 0 and now - e.death_time > 1000)]
 
-            # Health spawn / respawn handling (single pickup)
             if self.health_pickup is None:
-                # if no pickup exists and no spawn pending, spawn immediately
+
                 if self.next_health_spawn_time == 0:
                     self._spawn_health()
                 else:
-                    # if spawn time reached, spawn the pickup
+
                     if now >= self.next_health_spawn_time:
                         self._spawn_health()
             else:
-                # allow the pickup to perform any per-frame logic if needed
+
                 try:
                     self.health_pickup.update()
                 except Exception:
                     pass
 
-            # Check for player collecting the health pickup
             self._check_health_collision()
 
-            # update transient effects
             try:
                 for eff in self.effects:
                     try:
                         eff.update()
                     except Exception:
                         pass
-                # remove finished effects
+
                 self.effects = [e for e in self.effects if not getattr(e, 'finished', False)]
             except Exception:
                 pass
@@ -313,21 +318,20 @@ class Gameplay:
             if self.player.current_hp <= 0 and not self.is_dead:
                 self.is_dead = True
                 self.death_time = now
-                # mute sfx immediately because player is dead (avoid attack/hit sounds after death)
+
                 try:
-                    # try to set sfx volume to 0; config will be restored when restarting/going to menu
+
                     self.app.audio.set_sfx_volume(0)
                 except Exception:
                     pass
 
         else:
-            # Player is dead — wait a small delay for death animation, then show death menu
+
             elapsed_ms = now - self.death_time
             if not self.death_menu_active and elapsed_ms >= self.death_menu_delay_ms:
                 self.death_menu_active = True
                 self.death_menu_index = 0
 
-        # keep camera centered on player even after death
         try:
             self.camera.update(self.player.rect)
         except Exception:
@@ -348,7 +352,6 @@ class Gameplay:
 
                 self._draw_enemy_hp(screen, enemy, enemy_screen_rect)
 
-        # Draw health pickup (if present)
         if getattr(self, 'health_pickup', None):
             try:
                 hp_screen_rect = self.camera.apply(self.health_pickup.rect)
@@ -362,7 +365,6 @@ class Gameplay:
         if player_screen_rect.right > 0 and player_screen_rect.left < self.screen_width:
             self.player.draw_at(screen, player_screen_rect.topleft)
 
-        # draw transient effects (on top of entities)
         try:
             for eff in self.effects:
                 try:
@@ -489,7 +491,7 @@ class Gameplay:
 
     def _draw_death_countdown(self, screen):
         """Draw death screen with countdown to return to menu."""
-        # Minimal overlay when dead before the death menu appears (no countdown text)
+
         overlay = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         screen.blit(overlay, (0, 0))
@@ -518,7 +520,6 @@ class Gameplay:
             txt_x = w // 2 - txt.get_width() // 2
             txt_y = base_y + i * 56
 
-            # button background for clarity
             rect = pygame.Rect(txt_x - 12, txt_y - 6, txt.get_width() + 24, txt.get_height() + 12)
             pygame.draw.rect(screen, (40, 40, 40), rect, border_radius=6)
             if is_sel:
@@ -598,7 +599,7 @@ class Gameplay:
                     )
                 except Exception:
                     pass
-                # spawn hitspark on enemy at the collision point
+
                 try:
                     try:
                         hit_x, hit_y = enemy.get_hitbox().center
@@ -673,7 +674,6 @@ class Gameplay:
                 except Exception:
                     pass
 
-                # spawn hitspark on player at the collision point
                 try:
                     try:
                         px, py = player_hitbox.center
@@ -740,7 +740,6 @@ class Gameplay:
         new_enemy = Enemy(spawn_x, spawn_y)
         self.enemies.append(new_enemy)
 
-
     def _spawn_health(self):
         """Spawn a health pickup somewhere on the map, ensuring it's a reasonable distance from the player.
 
@@ -752,28 +751,24 @@ class Gameplay:
         attempts = 0
         while True:
             spawn_x = random.randint(100, self.world_width - 100)
-            # ensure not too close to player
+
             if abs(spawn_x - self.player.rect.centerx) > min_spawn_dist:
                 break
             attempts += 1
             if attempts > 30:
-                # give up and use whatever we have
+
                 break
 
-        # place the pickup slightly above the ground so its hitbox overlaps the player's hitbox
-        # when the player is standing on the ground. The health image still appears near the ground.
         spawn_y = self.ground_y - 48 - 12
         try:
             self.health_pickup = Health(spawn_x, spawn_y)
         except Exception:
-            # robust fallback: create a very simple rect-based placeholder
+
             import pygame
             h = Health(spawn_x, spawn_y)
             self.health_pickup = h
 
-        # clear any scheduled spawn time since we've spawned it
         self.next_health_spawn_time = 0
-
 
     def _check_health_collision(self):
         """Check whether the player collected the health pickup. If so, heal and schedule respawn in 30s."""
@@ -784,15 +779,14 @@ class Gameplay:
             player_hb = self.player.get_hitbox()
             health_hb = self.health_pickup.get_hitbox()
             if player_hb.colliderect(health_hb):
-                # Only collect if player is not at full HP. If at max HP, do nothing
-                # so the pickup remains in the world and the player can pass over it.
+
                 if self.player.current_hp < self.player.max_hp:
                     old_hp = self.player.current_hp
                     self.player.current_hp = min(self.player.max_hp, self.player.current_hp + 1)
-                    # remove pickup and schedule next spawn in 30s
+
                     self.health_pickup = None
                     self.next_health_spawn_time = pygame.time.get_ticks() + 30000
-                    # play pickup sfx if available
+
                     try:
                         self.app.audio.play_sound_effect('heal')
                     except Exception:
