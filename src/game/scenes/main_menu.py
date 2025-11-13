@@ -54,6 +54,10 @@ class MainMenu:
             pass
 
         self.config_overlay = None
+        # confirmation dialog state for exiting
+        self.confirm_exit = False
+        # 0 -> NÃO (default), 1 -> SIM
+        self.confirm_choice = 0
 
         self.controls = [
             ("Mover Esquerda", "← / A"),
@@ -99,6 +103,49 @@ class MainMenu:
         if event.type == pygame.QUIT:
             self.app.running = False
         if event.type == pygame.KEYDOWN:
+            # If confirm dialog is open, only handle dialog keys (block up/down menu navigation)
+            if self.confirm_exit:
+                if event.key in (pygame.K_LEFT, pygame.K_a):
+                    self.confirm_choice = max(0, self.confirm_choice - 1)
+                    try:
+                        self.app.audio.play_sound('select')
+                    except Exception:
+                        pass
+                    return
+                elif event.key in (pygame.K_RIGHT, pygame.K_d):
+                    self.confirm_choice = min(1, self.confirm_choice + 1)
+                    try:
+                        self.app.audio.play_sound('select')
+                    except Exception:
+                        pass
+                    return
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    if self.confirm_choice == 1:
+                        try:
+                            self.app.audio.play_sound('select')
+                        except Exception:
+                            pass
+                        self.app.running = False
+                        return
+                    else:
+                        try:
+                            self.app.audio.play_sound('select')
+                        except Exception:
+                            pass
+                        self.confirm_exit = False
+                        return
+                elif event.key == pygame.K_ESCAPE:
+                    # cancel dialog
+                    self.confirm_exit = False
+                    try:
+                        self.app.audio.play_sound('select')
+                    except Exception:
+                        pass
+                    return
+                # swallow any other keys while confirm dialog is open
+                return
+
+            # normal menu navigation (only active when confirm dialog is not open)
             if event.key in (pygame.K_UP, pygame.K_w):
                 self.selected = (self.selected - 1) % len(self.options)
             elif event.key in (pygame.K_DOWN, pygame.K_s):
@@ -114,7 +161,9 @@ class MainMenu:
                         self.app.audio.play_sound('select')
                     except Exception:
                         pass
-                    self.app.running = False
+                    # open confirmation dialog
+                    self.confirm_exit = True
+                    self.confirm_choice = 0
             elif event.key == pygame.K_ESCAPE:
                 self.app.running = False
 
@@ -250,6 +299,36 @@ class MainMenu:
 
         if self.config_overlay:
             self.config_overlay.render(screen)
+
+        # confirmation dialog for exiting
+        if self.confirm_exit:
+            box_w = 420
+            box_h = 140
+            bx = sw // 2 - box_w // 2
+            by = sh // 2 - box_h // 2
+            pygame.draw.rect(screen, (18, 18, 22), (bx, by, box_w, box_h), border_radius=8)
+            pygame.draw.rect(screen, (120, 110, 80), (bx + 2, by + 2, box_w - 4, box_h - 4), width=2, border_radius=6)
+
+            # message
+            msg = self.font.render('Deseja sair do jogo?', True, (240, 240, 240))
+            screen.blit(msg, (sw // 2 - msg.get_width() // 2, by + 18))
+
+            # options
+            opt_no = self.font.render('NÃO', True, (220, 220, 220) if self.confirm_choice == 0 else (150, 150, 150))
+            opt_yes = self.font.render('SIM', True, (220, 220, 220) if self.confirm_choice == 1 else (150, 150, 150))
+
+            opts_y = by + 70
+            gap = 80
+            total_w = opt_no.get_width() + gap + opt_yes.get_width()
+            ox = sw // 2 - total_w // 2
+
+            screen.blit(opt_no, (ox, opts_y))
+            screen.blit(opt_yes, (ox + opt_no.get_width() + gap, opts_y))
+
+            # highlight selected
+            sel_x = ox if self.confirm_choice == 0 else (ox + opt_no.get_width() + gap)
+            sel_w = opt_no.get_width() if self.confirm_choice == 0 else opt_yes.get_width()
+            pygame.draw.rect(screen, (255, 200, 120), (sel_x - 8, opts_y - 6, sel_w + 16, opt_no.get_height() + 12), border_radius=6, width=2)
 
     def _draw_arrow_icon(self, screen, x, y, direction, color=(240, 220, 160)):
         w = 18
