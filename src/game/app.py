@@ -1,3 +1,4 @@
+import os
 import pygame
 from .utils.audio import AudioManager
 
@@ -57,8 +58,27 @@ class GameApp:
         except Exception:
             pass
 
+        try:
+            base = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            icon_path = os.path.join(base, 'assets', 'icon', 'knight.ico')
+            if os.path.isfile(icon_path):
+                try:
+                    icon = pygame.image.load(icon_path)
+                    try:
+                        icon = icon.convert_alpha()
+                    except Exception:
+                        try:
+                            icon = icon.convert()
+                        except Exception:
+                            pass
+                    pygame.display.set_icon(icon)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         self.display = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Pygame Game")
+        pygame.display.set_caption("Knight Demo Game")
 
         self.screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.clock = pygame.time.Clock()
