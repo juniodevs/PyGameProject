@@ -58,6 +58,11 @@ class MainMenu:
         self.confirm_exit = False
         # 0 -> NÃO (default), 1 -> SIM
         self.confirm_choice = 0
+        # fade/animation for confirmation dialog
+        self._confirm_alpha = 0
+        self._confirm_fade_ms = 220
+        self._confirm_fade_start = None
+        self._confirm_closing = False
 
         self.controls = [
             ("Mover Esquerda", "← / A"),
@@ -132,11 +137,14 @@ class MainMenu:
                             self.app.audio.play_sound('select')
                         except Exception:
                             pass
-                        self.confirm_exit = False
+                        # start fade-out/close
+                        self._confirm_closing = True
+                        self._confirm_fade_start = pygame.time.get_ticks()
                         return
                 elif event.key == pygame.K_ESCAPE:
-                    # cancel dialog
-                    self.confirm_exit = False
+                    # start fade-out/close
+                    self._confirm_closing = True
+                    self._confirm_fade_start = pygame.time.get_ticks()
                     try:
                         self.app.audio.play_sound('select')
                     except Exception:
@@ -161,17 +169,45 @@ class MainMenu:
                         self.app.audio.play_sound('select')
                     except Exception:
                         pass
-                    # open confirmation dialog
+                    # open confirmation dialog (start fade-in)
                     self.confirm_exit = True
+                    self._confirm_closing = False
+                    self._confirm_fade_start = pygame.time.get_ticks()
+                    self._confirm_alpha = 0
                     self.confirm_choice = 0
             elif event.key == pygame.K_ESCAPE:
-                self.app.running = False
+                # open confirmation dialog instead of immediate exit
+                try:
+                    self.app.audio.play_sound('select')
+                except Exception:
+                    pass
+                self.confirm_exit = True
+                self._confirm_closing = False
+                self._confirm_fade_start = pygame.time.get_ticks()
+                self._confirm_alpha = 0
+                self.confirm_choice = 0
 
     def _close_config(self):
         self.config_overlay = None
 
     def update(self):
         now = pygame.time.get_ticks()
+        # update confirmation dialog fade
+        if self.confirm_exit or self._confirm_closing:
+            if self._confirm_fade_start is None:
+                self._confirm_fade_start = now
+            elapsed_f = now - self._confirm_fade_start
+            t = min(1.0, float(elapsed_f) / max(1, self._confirm_fade_ms))
+            if not self._confirm_closing:
+                self._confirm_alpha = int(255 * t)
+            else:
+                self._confirm_alpha = int(255 * (1.0 - t))
+                if t >= 1.0:
+                    # finish closing
+                    self.confirm_exit = False
+                    self._confirm_closing = False
+                    self._confirm_fade_start = None
+
         if now >= self._dir_change_time:
             self._auto_dir *= -1
             self._dir_change_time = now + 1200 + (now % 400)
@@ -300,22 +336,37 @@ class MainMenu:
         if self.config_overlay:
             self.config_overlay.render(screen)
 
-        # confirmation dialog for exiting
-        if self.confirm_exit:
+        # confirmation dialog for exiting (with fade)
+        if self._confirm_alpha > 0:
             box_w = 420
             box_h = 140
             bx = sw // 2 - box_w // 2
             by = sh // 2 - box_h // 2
-            pygame.draw.rect(screen, (18, 18, 22), (bx, by, box_w, box_h), border_radius=8)
-            pygame.draw.rect(screen, (120, 110, 80), (bx + 2, by + 2, box_w - 4, box_h - 4), width=2, border_radius=6)
+
+            # dim the background with a semi-transparent overlay
+            overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+            overlay.fill((8, 8, 12, int(150 * (self._confirm_alpha / 255.0))))
+            screen.blit(overlay, (0, 0))
+
+            # dialog surface with alpha
+            dialog = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+            dialog.fill((18, 18, 22, self._confirm_alpha))
+            # border
+            pygame.draw.rect(dialog, (120, 110, 80, self._confirm_alpha), (2, 2, box_w - 4, box_h - 4), width=2, border_radius=6)
+            screen.blit(dialog, (bx, by))
 
             # message
             msg = self.font.render('Deseja sair do jogo?', True, (240, 240, 240))
+            msg.set_alpha(self._confirm_alpha)
             screen.blit(msg, (sw // 2 - msg.get_width() // 2, by + 18))
 
             # options
-            opt_no = self.font.render('NÃO', True, (220, 220, 220) if self.confirm_choice == 0 else (150, 150, 150))
-            opt_yes = self.font.render('SIM', True, (220, 220, 220) if self.confirm_choice == 1 else (150, 150, 150))
+            col_no = (220, 220, 220) if self.confirm_choice == 0 else (150, 150, 150)
+            col_yes = (220, 220, 220) if self.confirm_choice == 1 else (150, 150, 150)
+            opt_no = self.font.render('NÃO', True, col_no)
+            opt_yes = self.font.render('SIM', True, col_yes)
+            opt_no.set_alpha(self._confirm_alpha)
+            opt_yes.set_alpha(self._confirm_alpha)
 
             opts_y = by + 70
             gap = 80
@@ -325,10 +376,12 @@ class MainMenu:
             screen.blit(opt_no, (ox, opts_y))
             screen.blit(opt_yes, (ox + opt_no.get_width() + gap, opts_y))
 
-            # highlight selected
+            # highlight selected (draw on main surface so alpha applies to stroke too)
             sel_x = ox if self.confirm_choice == 0 else (ox + opt_no.get_width() + gap)
             sel_w = opt_no.get_width() if self.confirm_choice == 0 else opt_yes.get_width()
-            pygame.draw.rect(screen, (255, 200, 120), (sel_x - 8, opts_y - 6, sel_w + 16, opt_no.get_height() + 12), border_radius=6, width=2)
+            hl_surf = pygame.Surface((sel_w + 16, opt_no.get_height() + 12), pygame.SRCALPHA)
+            pygame.draw.rect(hl_surf, (255, 200, 120, self._confirm_alpha), (0, 0, sel_w + 16, opt_no.get_height() + 12), width=2, border_radius=6)
+            screen.blit(hl_surf, (sel_x - 8, opts_y - 6))
 
     def _draw_arrow_icon(self, screen, x, y, direction, color=(240, 220, 160)):
         w = 18
