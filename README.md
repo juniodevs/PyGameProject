@@ -5,36 +5,24 @@ Projeto demonstrativo de um jogo 2D desenvolvido com Pygame. O objetivo deste re
 Este projeto foi desenvolvido para a disciplina "Linguagem de Programação Aplicada" da UNINTER.
 Curso: Análise e Desenvolvimento de Sistemas
 
-
 ## Descrição
 
 O jogo é um protótipo de ação/platformer com foco em combate corpo-a-corpo. Possui menu principal, cena de gameplay com inimigos que perseguem e atacam o jogador, pickups de vida, efeitos visuais/sons, e uma camada de configurações.
-
 
 ## Principais features
 
 - Tela de menu com navegação e seleção de opções (Iniciar, Configuração, Sair).
 - Cena de gameplay com:
-  - Jogador com movimento lateral, pulo, e ataques corpo-a-corpo (alternância entre dois ataques para variedade).
-  - Sistema de animações por spritesheets (player e inimigos), com estados: idle, run, turn, attack1, attack2, jump, fall, hit, death.
-  - Inimigos com IA simples: detecção do jogador, perseguição, ataques com cooldown e comportamento de recuo/ataque.
-  - Sistema de hitboxes separado da caixa visual (ajustável via `HITBOX_WIDTH` / `HITBOX_HEIGHT`).
-  - Sistema de colisões para ataques (área de ataque baseada na hitbox e na direção do jogador).
-  - Barra de HP para inimigos e overlay de HP do jogador.
-  - Pickups de vida (Health) que reaparecem após um tempo quando coletados.
-  - Efeitos de gameplay: slow-motion (pequena redução de time-scale) e zoom momentâneo em impactos.
-  - Efeito de impacto (hitspark): pequena animação de 2 frames exibida quando o jogador ou inimigo leva dano.
+  - Jogador com movimento lateral, pulo, e ataques corpo-a-corpo (vários estados de ataque).
+  - Sistema de animações por spritesheets (player e inimigos).
+  - Inimigos com IA simples: detecção do jogador, perseguição e ataques com cooldown.
+  - Hitboxes separadas da caixa visual e sistema de colisões para ataques.
+  - Barra de HP e pickups de vida.
+  - Efeitos visuais/sonoros: hitsparks, slow-motion e zoom em impactos.
 
-- Menus e fluxos de UI:
-  - Menu de pausa com opções (Continuar, Configuração, Voltar ao Menu).
-  - Menu de morte com opção de reiniciar fase ou voltar ao menu.
-  - Overlay de configuração (audio/controle) acessível a partir do menu e do pause.
+- Menus e fluxos de UI: pause, configurações e tela de morte.
 
-- Gerenciador de áudio avançado (`AudioManager`):
-  - Reproduz SFX e músicas a partir de `assets/sounds` e `assets/music`.
-  - Suporta carregamento preguiçoso, variantes de SFX (pastas com várias variantes), e processamento de camadas (pitch, bitcrush, distortion) quando numpy está disponível.
-  - Crossfade de músicas, ramp-up para música de menu, e playback de músicas de batalha com crossfade entre tracks.
-
+- Gerenciador de áudio (`AudioManager`) com suporte a SFX, variações por pasta e crossfade de músicas.
 
 ## Controles
 
@@ -44,37 +32,35 @@ O jogo é um protótipo de ação/platformer com foco em combate corpo-a-corpo. 
 - Pausar / Voltar ao menu: Esc
 - Navegar menus: ↑/W e ↓/S • Enter para selecionar
 
-
 ## Estrutura de ativos
 
-- `src/assets/images/player/` — spritesheets do jogador (nomes esperados como `_Idle.png`, `_Run.png`, etc.)
-- `src/assets/images/enemy/` — spritesheets dos inimigos
-- `src/assets/images/health/_Health.png` — asset do pickup de vida
-- `src/assets/sounds/` — efeitos sonoros (sfx) e subpastas com variantes
-- `src/assets/music/` — trilhas de música (menu, gameplay, game_over)
+- `src/assets/images/` — spritesheets do jogador e inimigos
+- `src/assets/sounds/` — efeitos sonoros (sfx)
+- `src/assets/music/` — trilhas de música (menu, gameplay)
 
 Créditos dos assets
 -------------------
+Alguns assets utilizados foram obtidos de coleções gratuitas no itch.io e modificados para o projeto.
 
-Alguns assets utilizados neste protótipo foram obtidos de coleções gratuitas no itch.io:
+Fontes dos assets (atribuição):
 
-- Fantasy Knight (personagem animado) — disponível em: https://aamatniekss.itch.io/fantasy-knight-free-pixelart-animated-character
-- Pixel Combat (sfx) — disponível em: https://heltonyan.itch.io/pixelcombat
+- Fantasy Knight — personagem e sprites animados por aamatniekss (itch.io)
+  - https://aamatniekss.itch.io/fantasy-knight-free-pixelart-animated-character
+- PixelCombat — sprites e efeitos de combate por heltonyan (itch.io)
+  - https://heltonyan.itch.io/pixelcombat
 
-Assets foram alterados manualmente por mim para se adequarem às necessidades do projeto (recorte, redimensionamento, ajustes de cor).
-
+Observação: as imagens e sprites foram adaptadas (recorte/escala/cores) para melhor se adequarem ao jogo.
 
 ## Configurações e constantes relevantes
 
-- `src/game/settings.py` contém constantes fundamentais como `SCREEN_WIDTH`, `SCREEN_HEIGHT`, `FPS`, cores, `HITBOX_WIDTH`, `HITBOX_HEIGHT`, `ATTACK_RANGE`, `ATTACK_HEIGHT_FACTOR`. não modifique sem necessidade.
-
+O arquivo `src/game/settings.py` contém constantes como `SCREEN_WIDTH`, `SCREEN_HEIGHT`, `FPS`, cores, `HITBOX_WIDTH`, `HITBOX_HEIGHT` e outras constantes de gameplay.
 
 ## Como executar
 
 Requisitos mínimos:
 
 - Python 3.8+ (recomendado)
-- dependências listadas em `requirements.txt` (principalmente pygame; numpy é opcional para processamento avançado de áudio)
+- Dependências listadas em `requirements.txt` (principalmente `pygame`).
 
 Instalação:
 
@@ -91,4 +77,4 @@ python .\src\main.py
 
 ## Licença
 
-O projeto segue a licença MIT (se desejar adicionar um arquivo LICENSE, inclua-o na raiz).
+O projeto segue a licença MIT. Se desejar, adicione um arquivo `LICENSE` na raiz.
